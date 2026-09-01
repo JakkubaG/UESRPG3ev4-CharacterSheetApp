@@ -259,16 +259,6 @@ class UESRPGCharacterSheet(tk.Tk):
         self.bonus_vars[bonus_name].set(str(bonus))
 #---------------PAGE2------------------
     def setup_tab2(self, parent):
-        # Główny kontener dzielący ekran na lewy (Skills) i prawy (Professions, Combat Style, Specializations)
-        main_container = ttk.Frame(parent)
-        main_container.pack(fill="both", expand=True, padx=10, pady=5)
-
-        skills_frame = ttk.LabelFrame(main_container, text="Skills")
-        skills_frame.pack(side="left", fill="both", expand=True, padx=(0, 5), pady=5)
-
-        right_container = ttk.Frame(main_container)
-        right_container.pack(side="right", fill="both", expand=True, padx=(5, 0), pady=5)
-
         # Definicja rang i odpowiadających im wartości (Rank, Bonus)
         self.skill_ranks_info = {
             "Untrained": (-1, -20),
@@ -279,6 +269,115 @@ class UESRPGCharacterSheet(tk.Tk):
             "Expert": (4, 40),
             "Master": (5, 50)
         }
+
+        # 1. FUNKCJE POMOCNICZE (Lokalne, zapobiegają błędom AttributeError)
+        def update_skill_values(skill_name):
+            data = self.skill_vars[skill_name]
+            selected_level = data["level_cb"].get()
+            rank, bonus = self.skill_ranks_info.get(selected_level, (-1, -20))
+
+            data["rank_var"].set(str(rank))
+            data["bonus_var"].set(f"+{bonus}" if bonus >= 0 else str(bonus))
+
+            for stat, tn_var in data["tn_vars"]:
+                stat_val_str = getattr(self, "attr_vars", {}).get(stat, tk.StringVar(value="0")).get()
+                try:
+                    stat_val = int(stat_val_str)
+                except ValueError:
+                    stat_val = 0
+                tn_var.set(str(stat_val + bonus))
+
+        def update_single_prof_row(row_data):
+            selected_level = row_data["level_cb"].get()
+            rank, bonus = self.skill_ranks_info.get(selected_level, (-1, -20))
+
+            row_data["rank_var"].set(str(rank))
+            row_data["bonus_var"].set(f"+{bonus}" if bonus >= 0 else str(bonus))
+
+            for widget in row_data["tn_container"].winfo_children():
+                widget.destroy()
+
+            row_data["tn_entries"] = []
+            selected_attrs = [cb.get() for cb in row_data["attr_cbs"] if cb.get() != "None"]
+
+            for idx, stat in enumerate(selected_attrs):
+                if idx > 0:
+                    ttk.Label(row_data["tn_container"], text=",").pack(side="left", padx=1)
+
+                stat_val_str = getattr(self, "attr_vars", {}).get(stat, tk.StringVar(value="0")).get()
+                try:
+                    stat_val = int(stat_val_str)
+                except ValueError:
+                    stat_val = 0
+
+                tn_val = stat_val + bonus
+                tn_var = tk.StringVar(value=str(tn_val))
+                tn_entry = ttk.Entry(row_data["tn_container"], textvariable=tn_var, width=4, justify="center",
+                                     state="readonly")
+                tn_entry.pack(side="left")
+
+                row_data["tn_entries"].append((stat, tn_var))
+
+        def update_cs_values():
+            selected_level = self.cs_level_cb.get()
+            rank, bonus = self.skill_ranks_info.get(selected_level, (-1, -20))
+
+            self.cs_rank_var.set(str(rank))
+            self.cs_bonus_var.set(f"+{bonus}" if bonus >= 0 else str(bonus))
+
+            str_val = int(getattr(self, "attr_vars", {}).get("Str", tk.StringVar(value="0")).get() or 0)
+            ag_val = int(getattr(self, "attr_vars", {}).get("Ag", tk.StringVar(value="0")).get() or 0)
+
+            self.cs_tn_str_var.set(str(str_val + bonus))
+            self.cs_tn_ag_var.set(str(ag_val + bonus))
+
+        # Przypisanie funkcji przeliczania do klasy, aby Tab1 mógł ją wywoływać
+        def recalculate_all_tns():
+            if hasattr(self, 'skill_vars'):
+                for skill_name in self.skill_vars:
+                    update_skill_values(skill_name)
+            if hasattr(self, 'prof_rows'):
+                for row_data in self.prof_rows:
+                    update_single_prof_row(row_data)
+            if hasattr(self, 'cs_level_cb'):
+                update_cs_values()
+
+        self.recalculate_all_tns = recalculate_all_tns
+
+        # 2. KONTENER ZE SCROLLBAREM (Canvas + Scrollbar)
+        canvas = tk.Canvas(parent, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+
+        main_container = ttk.Frame(canvas)
+
+        main_container.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas_window = canvas.create_window((0, 0), window=main_container, anchor="nw")
+
+        def _on_canvas_configure(event):
+            canvas.itemconfig(canvas_window, width=event.width)
+
+        canvas.bind('<Configure>', _on_canvas_configure)
+
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+
+        # 3. PODZIAŁ EKRANU (Skills | Professions, CS, Spec)
+        skills_frame = ttk.LabelFrame(main_container, text="Skills")
+        skills_frame.pack(side="left", fill="both", expand=True, padx=(10, 5), pady=5)
+
+        right_container = ttk.Frame(main_container)
+        right_container.pack(side="right", fill="both", expand=True, padx=(5, 10), pady=5)
 
         # --- LEWA STRONA: STANDARD SKILLS ---
         skills_data = [
@@ -305,13 +404,15 @@ class UESRPGCharacterSheet(tk.Tk):
         headers = ["Skill", "Level", "Rank", "Bonus", "TN"]
         for i, h in enumerate(headers):
             sticky_val = "w" if i in [0, 4] else ""
-            ttk.Label(skills_frame, text=h, font=('Helvetica', 9, 'bold')).grid(row=0, column=i, padx=5, pady=5, sticky=sticky_val)
+            ttk.Label(skills_frame, text=h, font=('Helvetica', 9, 'bold')).grid(row=0, column=i, padx=5, pady=5,
+                                                                                sticky=sticky_val)
 
         self.skill_vars = {}
 
         for row_idx, (skill_name, stats) in enumerate(skills_data, start=1):
             stats_str = f" ({', '.join(stats)})"
-            ttk.Label(skills_frame, text=f"{skill_name}{stats_str}").grid(row=row_idx, column=0, padx=5, pady=2, sticky="w")
+            ttk.Label(skills_frame, text=f"{skill_name}{stats_str}").grid(row=row_idx, column=0, padx=5, pady=2,
+                                                                          sticky="w")
 
             level_cb = ttk.Combobox(skills_frame, values=list(self.skill_ranks_info.keys()), state="readonly", width=10)
             level_cb.set("Untrained")
@@ -320,8 +421,10 @@ class UESRPGCharacterSheet(tk.Tk):
             rank_var = tk.StringVar(value="-1")
             bonus_var = tk.StringVar(value="-20")
 
-            ttk.Entry(skills_frame, textvariable=rank_var, width=4, justify="center", state="readonly").grid(row=row_idx, column=2, padx=2, pady=2)
-            ttk.Entry(skills_frame, textvariable=bonus_var, width=5, justify="center", state="readonly").grid(row=row_idx, column=3, padx=2, pady=2)
+            ttk.Entry(skills_frame, textvariable=rank_var, width=4, justify="center", state="readonly").grid(
+                row=row_idx, column=2, padx=2, pady=2)
+            ttk.Entry(skills_frame, textvariable=bonus_var, width=5, justify="center", state="readonly").grid(
+                row=row_idx, column=3, padx=2, pady=2)
 
             tn_container = ttk.Frame(skills_frame)
             tn_container.grid(row=row_idx, column=4, padx=2, pady=2, sticky="w")
@@ -333,7 +436,8 @@ class UESRPGCharacterSheet(tk.Tk):
 
                 tn_v = tk.StringVar(value="0")
                 tn_vars.append((stat, tn_v))
-                ttk.Entry(tn_container, textvariable=tn_v, width=4, justify="center", state="readonly").pack(side="left")
+                ttk.Entry(tn_container, textvariable=tn_v, width=4, justify="center", state="readonly").pack(
+                    side="left")
 
             self.skill_vars[skill_name] = {
                 "level_cb": level_cb,
@@ -343,34 +447,48 @@ class UESRPGCharacterSheet(tk.Tk):
                 "stats": stats
             }
 
-            level_cb.bind("<<ComboboxSelected>>", lambda event, s=skill_name: self.update_skill_values(s))
-            self.update_skill_values(skill_name)
+            level_cb.bind("<<ComboboxSelected>>", lambda event, s=skill_name: update_skill_values(s))
+            update_skill_values(skill_name)
 
         # --- PRAWA STRONA: PROFESSIONS ---
         prof_frame = ttk.LabelFrame(right_container, text="Professions / Custom Skills")
         prof_frame.pack(fill="x", padx=0, pady=(0, 5))
 
-        prof_headers = ["Custom Skill / Profession", "Level", "Attributes", "Rank", "Bonus", "TN"]
-        for i, h in enumerate(prof_headers):
-            ttk.Label(prof_frame, text=h, font=('Helvetica', 9, 'bold')).grid(row=0, column=i, padx=5, pady=5)
+        prof_headers_frame = ttk.Frame(prof_frame)
+        prof_headers_frame.pack(fill="x", padx=2, pady=(5, 2))
 
-        attr_options = ["None", "Str", "End", "Ag", "Int", "Wp", "Prc", "Prs", "Lck"]
-        self.prof_vars = {}
+        ttk.Label(prof_headers_frame, text="Custom Skill / Profession", font=('Helvetica', 9, 'bold'), width=22).pack(
+            side="left", padx=2)
+        ttk.Label(prof_headers_frame, text="Level", font=('Helvetica', 9, 'bold'), width=12).pack(side="left", padx=2)
+        ttk.Label(prof_headers_frame, text="Attributes", font=('Helvetica', 9, 'bold'), width=18).pack(side="left",
+                                                                                                       padx=2)
+        ttk.Label(prof_headers_frame, text="Rank", font=('Helvetica', 9, 'bold'), width=5).pack(side="left", padx=2)
+        ttk.Label(prof_headers_frame, text="Bonus", font=('Helvetica', 9, 'bold'), width=6).pack(side="left", padx=2)
+        ttk.Label(prof_headers_frame, text="TN", font=('Helvetica', 9, 'bold')).pack(side="left", padx=2)
 
-        for i in range(1, 6):
-            name_entry = ttk.Entry(prof_frame, width=18)
-            name_entry.grid(row=i, column=0, padx=4, pady=4)
+        prof_rows_container = ttk.Frame(prof_frame)
+        prof_rows_container.pack(fill="x", padx=2, pady=2)
 
-            level_cb = ttk.Combobox(prof_frame, values=list(self.skill_ranks_info.keys()), state="readonly", width=10)
+        self.prof_rows = []
+        attr_options = ["None", "Str", "End", "Ag", "Int", "Wp", "Prc", "Prs"]
+
+        def add_prof_row():
+            r_frame = ttk.Frame(prof_rows_container)
+            r_frame.pack(fill="x", pady=2)
+
+            name_entry = ttk.Entry(r_frame, width=20)
+            name_entry.pack(side="left", padx=2)
+
+            level_cb = ttk.Combobox(r_frame, values=list(self.skill_ranks_info.keys()), state="readonly", width=10)
             level_cb.set("Untrained")
-            level_cb.grid(row=i, column=1, padx=4, pady=4)
+            level_cb.pack(side="left", padx=2)
 
-            attr_cb_frame = ttk.Frame(prof_frame)
-            attr_cb_frame.grid(row=i, column=2, padx=4, pady=4)
+            attr_cb_frame = ttk.Frame(r_frame)
+            attr_cb_frame.pack(side="left", padx=2)
 
             attr_cbs = []
-            for c in range(3):
-                cb = ttk.Combobox(attr_cb_frame, values=attr_options, state="readonly", width=5)
+            for _ in range(3):
+                cb = ttk.Combobox(attr_cb_frame, values=attr_options, state="readonly", width=4)
                 cb.set("None")
                 cb.pack(side="left", padx=1)
                 attr_cbs.append(cb)
@@ -378,14 +496,16 @@ class UESRPGCharacterSheet(tk.Tk):
             rank_var = tk.StringVar(value="-1")
             bonus_var = tk.StringVar(value="-20")
 
-            ttk.Entry(prof_frame, textvariable=rank_var, width=4, justify="center", state="readonly").grid(row=i, column=3, padx=4, pady=4)
-            ttk.Entry(prof_frame, textvariable=bonus_var, width=5, justify="center", state="readonly").grid(row=i, column=4, padx=4, pady=4)
+            ttk.Entry(r_frame, textvariable=rank_var, width=4, justify="center", state="readonly").pack(side="left",
+                                                                                                        padx=2)
+            ttk.Entry(r_frame, textvariable=bonus_var, width=5, justify="center", state="readonly").pack(side="left",
+                                                                                                         padx=2)
 
-            tn_container = ttk.Frame(prof_frame)
-            tn_container.grid(row=i, column=5, padx=4, pady=4, sticky="w")
+            tn_container = ttk.Frame(r_frame)
+            tn_container.pack(side="left", padx=2)
 
-            prof_id = f"prof_{i}"
-            self.prof_vars[prof_id] = {
+            row_data = {
+                "frame": r_frame,
                 "name_entry": name_entry,
                 "level_cb": level_cb,
                 "attr_cbs": attr_cbs,
@@ -395,11 +515,29 @@ class UESRPGCharacterSheet(tk.Tk):
                 "tn_entries": []
             }
 
-            level_cb.bind("<<ComboboxSelected>>", lambda event, pid=prof_id: self.update_prof_values(pid))
-            for cb in attr_cbs:
-                cb.bind("<<ComboboxSelected>>", lambda event, pid=prof_id: self.update_prof_values(pid))
+            def update_this_prof():
+                update_single_prof_row(row_data)
 
-            self.update_prof_values(prof_id)
+            level_cb.bind("<<ComboboxSelected>>", lambda e: update_this_prof())
+            for cb in attr_cbs:
+                cb.bind("<<ComboboxSelected>>", lambda e: update_this_prof())
+
+            del_btn = ttk.Button(r_frame, text="✕", width=2, command=lambda: remove_prof_row(row_data))
+            del_btn.pack(side="right", padx=2)
+
+            self.prof_rows.append(row_data)
+            update_this_prof()
+
+        def remove_prof_row(row_data):
+            row_data["frame"].destroy()
+            if row_data in self.prof_rows:
+                self.prof_rows.remove(row_data)
+
+        for _ in range(3):
+            add_prof_row()
+
+        add_prof_btn = ttk.Button(prof_frame, text="+ Add Profession", command=add_prof_row)
+        add_prof_btn.pack(anchor="w", padx=5, pady=5)
 
         # --- PRAWA STRONA: COMBAT STYLE (Str, Ag) ---
         cs_frame = ttk.LabelFrame(right_container, text="Combat Style (Str, Ag)")
@@ -419,129 +557,92 @@ class UESRPGCharacterSheet(tk.Tk):
 
         ttk.Label(cs_top, text="Rank:").pack(side="left", padx=(0, 2))
         self.cs_rank_var = tk.StringVar(value="-1")
-        ttk.Entry(cs_top, textvariable=self.cs_rank_var, width=4, justify="center", state="readonly").pack(side="left", padx=(0, 10))
+        ttk.Entry(cs_top, textvariable=self.cs_rank_var, width=4, justify="center", state="readonly").pack(side="left",
+                                                                                                           padx=(0, 10))
 
         ttk.Label(cs_top, text="Bonus:").pack(side="left", padx=(0, 2))
         self.cs_bonus_var = tk.StringVar(value="-20")
-        ttk.Entry(cs_top, textvariable=self.cs_bonus_var, width=5, justify="center", state="readonly").pack(side="left", padx=(0, 10))
+        ttk.Entry(cs_top, textvariable=self.cs_bonus_var, width=5, justify="center", state="readonly").pack(side="left",
+                                                                                                            padx=(0,
+                                                                                                                  10))
 
         ttk.Label(cs_top, text="TN:").pack(side="left", padx=(0, 2))
         self.cs_tn_str_var = tk.StringVar(value="0")
         self.cs_tn_ag_var = tk.StringVar(value="0")
-        ttk.Entry(cs_top, textvariable=self.cs_tn_str_var, width=4, justify="center", state="readonly").pack(side="left")
+        ttk.Entry(cs_top, textvariable=self.cs_tn_str_var, width=4, justify="center", state="readonly").pack(
+            side="left")
         ttk.Label(cs_top, text=",").pack(side="left", padx=1)
         ttk.Entry(cs_top, textvariable=self.cs_tn_ag_var, width=4, justify="center", state="readonly").pack(side="left")
 
-        cs_text_frame = ttk.Frame(cs_frame)
-        cs_text_frame.pack(fill="both", expand=True, padx=5, pady=(0, 5))
+        ttk.Label(cs_frame, text="Weapons / Armor:", font=('Helvetica', 9, 'bold')).pack(anchor="w", padx=5,
+                                                                                         pady=(5, 2))
 
-        self.cs_text = tk.Text(cs_text_frame, height=3, wrap="word")
-        cs_scroll = ttk.Scrollbar(cs_text_frame, orient="vertical", command=self.cs_text.yview)
-        self.cs_text.configure(yscrollcommand=cs_scroll.set)
+        cs_lines_container = ttk.Frame(cs_frame)
+        cs_lines_container.pack(fill="x", padx=5, pady=(0, 5))
 
-        self.cs_text.pack(side="left", fill="both", expand=True)
-        cs_scroll.pack(side="right", fill="y")
+        self.cs_lines = []
 
-        self.cs_level_cb.bind("<<ComboboxSelected>>", lambda event: self.update_cs_values())
-        self.update_cs_values()
+        def add_cs_line_row():
+            r_frame = ttk.Frame(cs_lines_container)
+            r_frame.pack(fill="x", pady=1)
+
+            entry = ttk.Entry(r_frame)
+            entry.pack(side="left", fill="x", expand=True, padx=(0, 2))
+
+            row_data = {"frame": r_frame, "entry": entry}
+
+            del_btn = ttk.Button(r_frame, text="✕", width=2, command=lambda: remove_cs_line_row(row_data))
+            del_btn.pack(side="right")
+
+            self.cs_lines.append(row_data)
+
+        def remove_cs_line_row(row_data):
+            row_data["frame"].destroy()
+            if row_data in self.cs_lines:
+                self.cs_lines.remove(row_data)
+
+        for _ in range(5):
+            add_cs_line_row()
+
+        add_cs_line_btn = ttk.Button(cs_frame, text="+ Add Weapon / Armor", command=add_cs_line_row)
+        add_cs_line_btn.pack(anchor="w", padx=5, pady=(0, 5))
+
+        self.cs_level_cb.bind("<<ComboboxSelected>>", lambda event: update_cs_values())
+        update_cs_values()
 
         # --- PRAWA STRONA: SPECIALIZATIONS ---
         spec_frame = ttk.LabelFrame(right_container, text="Specializations")
         spec_frame.pack(fill="both", expand=True, padx=0, pady=(5, 0))
 
-        self.spec_text = tk.Text(spec_frame, height=4, wrap="word")
-        spec_scroll = ttk.Scrollbar(spec_frame, orient="vertical", command=self.spec_text.yview)
-        self.spec_text.configure(yscrollcommand=spec_scroll.set)
+        spec_lines_container = ttk.Frame(spec_frame)
+        spec_lines_container.pack(fill="both", expand=True, padx=5, pady=5)
 
-        self.spec_text.pack(side="left", fill="both", expand=True, padx=(5, 0), pady=5)
-        spec_scroll.pack(side="right", fill="y", padx=(0, 5), pady=5)
+        self.spec_lines = []
 
-    def update_skill_values(self, skill_name):
-        """Aktualizuje pola Rank, Bonus oraz TN dla standardowych umiejętności."""
-        data = self.skill_vars[skill_name]
-        selected_level = data["level_cb"].get()
+        def add_spec_line_row():
+            r_frame = ttk.Frame(spec_lines_container)
+            r_frame.pack(fill="x", pady=1)
 
-        rank, bonus = self.skill_ranks_info.get(selected_level, (-1, -20))
+            entry = ttk.Entry(r_frame)
+            entry.pack(side="left", fill="x", expand=True, padx=(0, 2))
 
-        data["rank_var"].set(str(rank))
-        data["bonus_var"].set(f"+{bonus}" if bonus >= 0 else str(bonus))
+            row_data = {"frame": r_frame, "entry": entry}
 
-        for stat, tn_var in data["tn_vars"]:
-            stat_val_str = getattr(self, "attr_vars", {}).get(stat, tk.StringVar(value="0")).get()
-            try:
-                stat_val = int(stat_val_str)
-            except ValueError:
-                stat_val = 0
+            del_btn = ttk.Button(r_frame, text="✕", width=2, command=lambda: remove_spec_line_row(row_data))
+            del_btn.pack(side="right")
 
-            tn_var.set(str(stat_val + bonus))
+            self.spec_lines.append(row_data)
 
-    def update_prof_values(self, prof_id):
-        """Aktualizuje pola Rank, Bonus oraz dynamiczne pola TN dla Custom Skills/Professions."""
-        data = self.prof_vars[prof_id]
-        selected_level = data["level_cb"].get()
+        def remove_spec_line_row(row_data):
+            row_data["frame"].destroy()
+            if row_data in self.spec_lines:
+                self.spec_lines.remove(row_data)
 
-        rank, bonus = self.skill_ranks_info.get(selected_level, (-1, -20))
+        for _ in range(2):
+            add_spec_line_row()
 
-        data["rank_var"].set(str(rank))
-        data["bonus_var"].set(f"+{bonus}" if bonus >= 0 else str(bonus))
-
-        for widget in data["tn_container"].winfo_children():
-            widget.destroy()
-
-        data["tn_entries"] = []
-        selected_attrs = [cb.get() for cb in data["attr_cbs"] if cb.get() != "None"]
-
-        for idx, stat in enumerate(selected_attrs):
-            if idx > 0:
-                ttk.Label(data["tn_container"], text=",").pack(side="left", padx=1)
-
-            stat_val_str = getattr(self, "attr_vars", {}).get(stat, tk.StringVar(value="0")).get()
-            try:
-                stat_val = int(stat_val_str)
-            except ValueError:
-                stat_val = 0
-
-            tn_val = stat_val + bonus
-            tn_var = tk.StringVar(value=str(tn_val))
-            tn_entry = ttk.Entry(data["tn_container"], textvariable=tn_var, width=4, justify="center", state="readonly")
-            tn_entry.pack(side="left")
-
-            data["tn_entries"].append((stat, tn_var))
-
-    def update_cs_values(self):
-        """Aktualizuje wartości Rank, Bonus oraz TN (dla Str i Ag) w Combat Style."""
-        selected_level = self.cs_level_cb.get()
-        rank, bonus = self.skill_ranks_info.get(selected_level, (-1, -20))
-
-        self.cs_rank_var.set(str(rank))
-        self.cs_bonus_var.set(f"+{bonus}" if bonus >= 0 else str(bonus))
-
-        str_val = int(getattr(self, "attr_vars", {}).get("Str", tk.StringVar(value="0")).get() or 0)
-        ag_val = int(getattr(self, "attr_vars", {}).get("Ag", tk.StringVar(value="0")).get() or 0)
-
-        self.cs_tn_str_var.set(str(str_val + bonus))
-        self.cs_tn_ag_var.set(str(ag_val + bonus))
-
-    def recalculate_all_tns(self):
-        """Wywoływane przy zmianie statystyk w Tab 1 - odświeża TN dla wszystkich sekcji w Tab 2."""
-        if hasattr(self, 'skill_vars'):
-            for skill_name in self.skill_vars:
-                self.update_skill_values(skill_name)
-
-        if hasattr(self, 'prof_vars'):
-            for prof_id in self.prof_vars:
-                data = self.prof_vars[prof_id]
-                _, bonus = self.skill_ranks_info.get(data["level_cb"].get(), (-1, -20))
-                for stat, tn_var in data["tn_entries"]:
-                    stat_val_str = getattr(self, "attr_vars", {}).get(stat, tk.StringVar(value="0")).get()
-                    try:
-                        stat_val = int(stat_val_str)
-                    except ValueError:
-                        stat_val = 0
-                    tn_var.set(str(stat_val + bonus))
-
-        if hasattr(self, 'cs_level_cb'):
-            self.update_cs_values()
+        add_spec_btn = ttk.Button(spec_frame, text="+ Add Specialization", command=add_spec_line_row)
+        add_spec_btn.pack(anchor="w", padx=5, pady=(0, 5))
 #---------------PAGE3------------------
     def setup_tab3(self, parent):
         # Główny kontener dzielący ekran na lewy i prawy
