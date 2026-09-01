@@ -645,15 +645,40 @@ class UESRPGCharacterSheet(tk.Tk):
         add_spec_btn.pack(anchor="w", padx=5, pady=(0, 5))
 #---------------PAGE3------------------
     def setup_tab3(self, parent):
-        # Główny kontener dzielący ekran na lewy i prawy
-        main_container = ttk.Frame(parent)
-        main_container.pack(fill="both", expand=True, padx=10, pady=5)
+        # 1. KONTENER ZE SCROLLBAREM (Canvas + Scrollbar)
+        canvas = tk.Canvas(parent, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
 
+        main_container = ttk.Frame(canvas)
+
+        main_container.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas_window = canvas.create_window((0, 0), window=main_container, anchor="nw")
+
+        def _on_canvas_configure(event):
+            canvas.itemconfig(canvas_window, width=event.width)
+
+        canvas.bind('<Configure>', _on_canvas_configure)
+
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+
+        # Podział ekranu na stronę lewą i prawą
         left_side = ttk.Frame(main_container)
-        left_side.pack(side="left", fill="both", expand=True, padx=(0, 5))
+        left_side.pack(side="left", fill="both", expand=True, padx=(10, 5), pady=5)
 
         right_side = ttk.Frame(main_container)
-        right_side.pack(side="right", fill="both", expand=True, padx=(5, 0))
+        right_side.pack(side="right", fill="both", expand=True, padx=(5, 10), pady=5)
 
         # ==========================================
         # LEWA STRONA: ARMOR, SHIELD, NOTES
@@ -774,49 +799,65 @@ class UESRPGCharacterSheet(tk.Tk):
 
         self.weapons_vars = {"melee": [], "ranged": [], "ammo": []}
 
-        def build_weapon_table(parent_frame, title, category_key):
+        def build_dynamic_weapon_table(parent_frame, title, category_key):
             frame = ttk.LabelFrame(parent_frame, text=title)
             frame.pack(fill="x", pady=(0, 5))
 
+            headers_frame = ttk.Frame(frame)
+            headers_frame.pack(fill="x", padx=2, pady=(2, 0))
+
+            rows_container = ttk.Frame(frame)
+            rows_container.pack(fill="x", padx=2, pady=2)
+
             if category_key == "melee":
-                headers = ["Name", "Dmg", "Mat. Bonus", "H", "Reach", "ENC"]
-                for col_idx, h in enumerate(headers):
-                    ttk.Label(frame, text=h, font=('Helvetica', 8, 'bold')).grid(row=0, column=col_idx, padx=2, pady=2)
+                headers = [("Name", 0), ("Dmg", 8), ("Mat. Bonus", 10), ("H", 6), ("Reach", 6), ("ENC", 5)]
+                for text, w in headers:
+                    if w == 0:
+                        ttk.Label(headers_frame, text=text, font=('Helvetica', 8, 'bold')).pack(side="left", fill="x", expand=True, padx=2)
+                    else:
+                        ttk.Label(headers_frame, text=text, font=('Helvetica', 8, 'bold'), width=w).pack(side="left", padx=2)
+                # Pusta etykieta do wyrównania nagłówka z przyciskiem usuwania
+                ttk.Label(headers_frame, text="", width=3).pack(side="right")
 
-                current_row = 1
-                for _ in range(4):
-                    name_entry = ttk.Entry(frame, width=50)
-                    name_entry.grid(row=current_row, column=0, padx=2, pady=2, sticky="ew")
+                def add_melee_row():
+                    row_frame = ttk.Frame(rows_container)
+                    row_frame.pack(fill="x", pady=2)
 
-                    dmg_cb = ttk.Combobox(frame, values=dmg_options, state="readonly", width=6)
-                    dmg_cb.set("1d4")
-                    dmg_cb.grid(row=current_row, column=1, padx=2, pady=2)
+                    top_row = ttk.Frame(row_frame)
+                    top_row.pack(fill="x")
 
-                    mat_cb = ttk.Combobox(frame, values=bonus_mat_options, state="readonly", width=5)
-                    mat_cb.set("+0")
-                    mat_cb.grid(row=current_row, column=2, padx=2, pady=2)
+                    del_btn = ttk.Button(top_row, text="✕", width=2, command=lambda: remove_row(item_data))
+                    del_btn.pack(side="right", padx=(2, 0))
 
-                    h_cb = ttk.Combobox(frame, values=h_options, state="readonly", width=4)
+                    enc_entry = ttk.Entry(top_row, width=5, justify="center")
+                    enc_entry.pack(side="right", padx=2)
+
+                    reach_entry = ttk.Entry(top_row, width=6, justify="center")
+                    reach_entry.pack(side="right", padx=2)
+
+                    h_cb = ttk.Combobox(top_row, values=h_options, state="readonly", width=4)
                     h_cb.set("1H")
-                    h_cb.grid(row=current_row, column=3, padx=2, pady=2)
+                    h_cb.pack(side="right", padx=2)
 
-                    reach_entry = ttk.Entry(frame, width=6, justify="center")
-                    reach_entry.grid(row=current_row, column=4, padx=2, pady=2)
+                    mat_cb = ttk.Combobox(top_row, values=bonus_mat_options, state="readonly", width=5)
+                    mat_cb.set("+0")
+                    mat_cb.pack(side="right", padx=2)
 
-                    enc_entry = ttk.Entry(frame, width=5, justify="center")
-                    enc_entry.grid(row=current_row, column=5, padx=2, pady=2)
+                    dmg_cb = ttk.Combobox(top_row, values=dmg_options, state="readonly", width=6)
+                    dmg_cb.set("1d4")
+                    dmg_cb.pack(side="right", padx=2)
 
-                    current_row += 1
+                    name_entry = ttk.Entry(top_row)
+                    name_entry.pack(side="left", fill="x", expand=True, padx=2)
 
-                    qualities_frame = ttk.Frame(frame)
-                    qualities_frame.grid(row=current_row, column=0, columnspan=6, padx=5, pady=(0, 6), sticky="ew")
+                    qualities_frame = ttk.Frame(row_frame)
+                    qualities_frame.pack(fill="x", padx=2, pady=(2, 0))
 
                     crushing_var = tk.BooleanVar()
                     splitting_var = tk.BooleanVar()
                     slashing_var = tk.BooleanVar()
 
-                    ttk.Checkbutton(qualities_frame, text="Crushing", variable=crushing_var).pack(side="left",
-                                                                                                  padx=(0, 4))
+                    ttk.Checkbutton(qualities_frame, text="Crushing", variable=crushing_var).pack(side="left", padx=(0, 4))
                     ttk.Checkbutton(qualities_frame, text="Splitting", variable=splitting_var).pack(side="left", padx=4)
                     ttk.Checkbutton(qualities_frame, text="Slashing", variable=slashing_var).pack(side="left", padx=4)
 
@@ -824,11 +865,11 @@ class UESRPGCharacterSheet(tk.Tk):
                     other_qualities_entry = ttk.Entry(qualities_frame)
                     other_qualities_entry.pack(side="left", fill="x", expand=True, padx=(0, 2))
 
-                    ttk.Separator(frame, orient="horizontal").grid(row=current_row + 1, column=0, columnspan=6,
-                                                                   sticky="ew", pady=2)
-                    current_row += 2
+                    sep = ttk.Separator(row_frame, orient="horizontal")
+                    sep.pack(fill="x", pady=4)
 
-                    self.weapons_vars["melee"].append({
+                    item_data = {
+                        "frame": row_frame,
                         "name": name_entry,
                         "dmg": dmg_cb,
                         "mat_bonus": mat_cb,
@@ -841,28 +882,45 @@ class UESRPGCharacterSheet(tk.Tk):
                             "slashing": slashing_var,
                             "other": other_qualities_entry
                         }
-                    })
+                    }
+
+                    self.weapons_vars["melee"].append(item_data)
+
+                def remove_row(item_data):
+                    item_data["frame"].destroy()
+                    if item_data in self.weapons_vars["melee"]:
+                        self.weapons_vars["melee"].remove(item_data)
+
+                for _ in range(3):
+                    add_melee_row()
+
+                btn = ttk.Button(frame, text="+ Add Melee Weapon", command=add_melee_row)
+                btn.pack(anchor="w", padx=5, pady=5)
 
             elif category_key == "ranged":
-                headers = ["Type", "Dmg", "H", "Range (Short / Med / Long)", "ENC"]
-                for col_idx, h in enumerate(headers):
-                    ttk.Label(frame, text=h, font=('Helvetica', 8, 'bold')).grid(row=0, column=col_idx, padx=2, pady=2)
+                headers = [("Type", 0), ("Dmg", 8), ("H", 6), ("Range (Short / Med / Long)", 24), ("ENC", 5)]
+                for text, w in headers:
+                    if w == 0:
+                        ttk.Label(headers_frame, text=text, font=('Helvetica', 8, 'bold')).pack(side="left", fill="x", expand=True, padx=2)
+                    else:
+                        ttk.Label(headers_frame, text=text, font=('Helvetica', 8, 'bold'), width=w).pack(side="left", padx=2)
+                ttk.Label(headers_frame, text="", width=3).pack(side="right")
 
-                current_row = 1
-                for _ in range(4):
-                    type_entry = ttk.Entry(frame, width=45)
-                    type_entry.grid(row=current_row, column=0, padx=2, pady=2, sticky="ew")
+                def add_ranged_row():
+                    row_frame = ttk.Frame(rows_container)
+                    row_frame.pack(fill="x", pady=2)
 
-                    dmg_cb = ttk.Combobox(frame, values=dmg_options, state="readonly", width=6)
-                    dmg_cb.set("1d4")
-                    dmg_cb.grid(row=current_row, column=1, padx=2, pady=2)
+                    top_row = ttk.Frame(row_frame)
+                    top_row.pack(fill="x")
 
-                    h_cb = ttk.Combobox(frame, values=h_options, state="readonly", width=4)
-                    h_cb.set("2H")
-                    h_cb.grid(row=current_row, column=2, padx=2, pady=2)
+                    del_btn = ttk.Button(top_row, text="✕", width=2, command=lambda: remove_row(item_data))
+                    del_btn.pack(side="right", padx=(2, 0))
 
-                    range_frame = ttk.Frame(frame)
-                    range_frame.grid(row=current_row, column=3, padx=2, pady=2)
+                    enc_entry = ttk.Entry(top_row, width=5, justify="center")
+                    enc_entry.pack(side="right", padx=2)
+
+                    range_frame = ttk.Frame(top_row)
+                    range_frame.pack(side="right", padx=2)
 
                     r1_entry = ttk.Entry(range_frame, width=4, justify="center")
                     r1_entry.pack(side="left")
@@ -875,23 +933,29 @@ class UESRPGCharacterSheet(tk.Tk):
                     r3_entry = ttk.Entry(range_frame, width=4, justify="center")
                     r3_entry.pack(side="left")
 
-                    enc_entry = ttk.Entry(frame, width=5, justify="center")
-                    enc_entry.grid(row=current_row, column=4, padx=2, pady=2)
+                    h_cb = ttk.Combobox(top_row, values=h_options, state="readonly", width=4)
+                    h_cb.set("2H")
+                    h_cb.pack(side="right", padx=2)
 
-                    current_row += 1
+                    dmg_cb = ttk.Combobox(top_row, values=dmg_options, state="readonly", width=6)
+                    dmg_cb.set("1d4")
+                    dmg_cb.pack(side="right", padx=2)
 
-                    qualities_frame = ttk.Frame(frame)
-                    qualities_frame.grid(row=current_row, column=0, columnspan=5, padx=5, pady=(0, 6), sticky="ew")
+                    type_entry = ttk.Entry(top_row)
+                    type_entry.pack(side="left", fill="x", expand=True, padx=2)
+
+                    qualities_frame = ttk.Frame(row_frame)
+                    qualities_frame.pack(fill="x", padx=2, pady=(2, 0))
 
                     ttk.Label(qualities_frame, text="Qualities:").pack(side="left", padx=(0, 5))
                     qualities_entry = ttk.Entry(qualities_frame)
                     qualities_entry.pack(side="left", fill="x", expand=True, padx=(0, 2))
 
-                    ttk.Separator(frame, orient="horizontal").grid(row=current_row + 1, column=0, columnspan=5,
-                                                                   sticky="ew", pady=2)
-                    current_row += 2
+                    sep = ttk.Separator(row_frame, orient="horizontal")
+                    sep.pack(fill="x", pady=4)
 
-                    self.weapons_vars["ranged"].append({
+                    item_data = {
+                        "frame": row_frame,
                         "type": type_entry,
                         "dmg": dmg_cb,
                         "h": h_cb,
@@ -900,44 +964,78 @@ class UESRPGCharacterSheet(tk.Tk):
                         "range_long": r3_entry,
                         "qualities": qualities_entry,
                         "enc": enc_entry
-                    })
+                    }
+
+                    self.weapons_vars["ranged"].append(item_data)
+
+                def remove_row(item_data):
+                    item_data["frame"].destroy()
+                    if item_data in self.weapons_vars["ranged"]:
+                        self.weapons_vars["ranged"].remove(item_data)
+
+                for _ in range(3):
+                    add_ranged_row()
+
+                btn = ttk.Button(frame, text="+ Add Ranged Weapon", command=add_ranged_row)
+                btn.pack(anchor="w", padx=5, pady=5)
 
             elif category_key == "ammo":
-                headers = ["Qty", "Name", "Dam Mod", "Qualities", "ENC"]
-                for col_idx, h in enumerate(headers):
-                    ttk.Label(frame, text=h, font=('Helvetica', 8, 'bold')).grid(row=0, column=col_idx, padx=2, pady=2)
+                headers = [("Qty", 6), ("Name", 0), ("Dam Mod", 10), ("Qualities", 0), ("ENC", 5)]
+                for text, w in headers:
+                    if w == 0:
+                        ttk.Label(headers_frame, text=text, font=('Helvetica', 8, 'bold')).pack(side="left", fill="x", expand=True, padx=2)
+                    else:
+                        ttk.Label(headers_frame, text=text, font=('Helvetica', 8, 'bold'), width=w).pack(side="left", padx=2)
+                ttk.Label(headers_frame, text="", width=3).pack(side="right")
 
-                frame.columnconfigure(1, weight=1)  # Nazwa amunicji dostosowuje szerokość
-                frame.columnconfigure(3, weight=1)  # Qualities dostosowuje szerokość
+                def add_ammo_row():
+                    row_frame = ttk.Frame(rows_container)
+                    row_frame.pack(fill="x", pady=2)
 
-                for row_idx in range(1, 5):  # 3 wiersze amunicji
-                    qty_entry = ttk.Entry(frame, width=4, justify="center")
-                    qty_entry.grid(row=row_idx, column=0, padx=2, pady=2)
+                    del_btn = ttk.Button(row_frame, text="✕", width=2, command=lambda: remove_row(item_data))
+                    del_btn.pack(side="right", padx=(2, 0))
 
-                    name_entry = ttk.Entry(frame, width=15)
-                    name_entry.grid(row=row_idx, column=1, padx=2, pady=2, sticky="ew")
+                    enc_entry = ttk.Entry(row_frame, width=5, justify="center")
+                    enc_entry.pack(side="right", padx=2)
 
-                    dam_mod_entry = ttk.Entry(frame, width=8, justify="center")
-                    dam_mod_entry.grid(row=row_idx, column=2, padx=2, pady=2)
+                    qualities_entry = ttk.Entry(row_frame)
+                    qualities_entry.pack(side="right", fill="x", expand=True, padx=2)
 
-                    qualities_entry = ttk.Entry(frame, width=18)
-                    qualities_entry.grid(row=row_idx, column=3, padx=2, pady=2, sticky="ew")
+                    dam_mod_entry = ttk.Entry(row_frame, width=8, justify="center")
+                    dam_mod_entry.pack(side="right", padx=2)
 
-                    enc_entry = ttk.Entry(frame, width=5, justify="center")
-                    enc_entry.grid(row=row_idx, column=4, padx=2, pady=2)
+                    qty_entry = ttk.Entry(row_frame, width=5, justify="center")
+                    qty_entry.pack(side="left", padx=2)
 
-                    self.weapons_vars["ammo"].append({
+                    name_entry = ttk.Entry(row_frame)
+                    name_entry.pack(side="left", fill="x", expand=True, padx=2)
+
+                    item_data = {
+                        "frame": row_frame,
                         "qty": qty_entry,
                         "name": name_entry,
                         "dam_mod": dam_mod_entry,
                         "qualities": qualities_entry,
                         "enc": enc_entry
-                    })
+                    }
 
-        # Wywołania budujące wszystkie 3 sekcje:
-        build_weapon_table(right_side, "Melee Weapons", "melee")
-        build_weapon_table(right_side, "Ranged Weapons", "ranged")
-        build_weapon_table(right_side, "Ammunition Materials", "ammo")
+                    self.weapons_vars["ammo"].append(item_data)
+
+                def remove_row(item_data):
+                    item_data["frame"].destroy()
+                    if item_data in self.weapons_vars["ammo"]:
+                        self.weapons_vars["ammo"].remove(item_data)
+
+                for _ in range(3):
+                    add_ammo_row()
+
+                btn = ttk.Button(frame, text="+ Add Ammunition", command=add_ammo_row)
+                btn.pack(anchor="w", padx=5, pady=5)
+
+        # Wywołanie budujące wszystkie 3 dynamiczne sekcje
+        build_dynamic_weapon_table(right_side, "Melee Weapons", "melee")
+        build_dynamic_weapon_table(right_side, "Ranged Weapons", "ranged")
+        build_dynamic_weapon_table(right_side, "Ammunition", "ammo")
 
 # ---------------PAGE4------------------
     def setup_tab4(self, parent):
