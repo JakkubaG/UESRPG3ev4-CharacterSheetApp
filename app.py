@@ -59,7 +59,7 @@ class UESRPGCharacterSheet(tk.Tk):
         self.setup_tab3(tab3)
         self.setup_tab4(tab4)
         self.setup_tab5(tab5)
-        # self.setup_tab6(tab6)
+        self.setup_tab6(tab6)
 
 # ---------------PAGE1------------------
     def setup_tab1(self, parent):
@@ -1014,6 +1014,384 @@ class UESRPGCharacterSheet(tk.Tk):
     def _remove_ttp_row(self, category_key, row_data):
         row_data["frame"].destroy()
         self.ttp_data[category_key].remove(row_data)
+# ---------------PAGE6------------------
+# ==========================================
+    # STRONA 6: SPELLCASTING, RITUALS & SPELLS
+    # ==========================================
+    def setup_tab6(self, parent):
+        main_canvas = tk.Canvas(parent, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=main_canvas.yview)
+
+        scrollable_frame = ttk.Frame(main_canvas)
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: main_canvas.configure(scrollregion=main_canvas.bbox("all"))
+        )
+
+        main_canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        main_canvas.configure(yscrollcommand=scrollbar.set)
+
+        main_canvas.pack(side="left", fill="both", expand=True, padx=5, pady=5)
+        scrollbar.pack(side="right", fill="y")
+
+        container = ttk.Frame(scrollable_frame)
+        container.pack(fill="both", expand=True, padx=5, pady=5)
+
+        left_side = ttk.Frame(container)
+        left_side.pack(side="left", fill="both", expand=True, padx=(0, 10))
+
+        right_side = ttk.Frame(container)
+        right_side.pack(side="right", fill="both", expand=True, padx=(10, 0))
+
+        self.spellcasting_vars = {}
+        self.custom_magic_skills = []
+        self.specializations_vars = []
+        self.rituals_vars = []
+        self.spells_vars = []
+
+        # ==========================================
+        # 1. SPELLCASTING SKILLS
+        # ==========================================
+        spell_frame = ttk.LabelFrame(left_side, text="Spellcasting Skills")
+        spell_frame.pack(fill="x", pady=(0, 10))
+
+        ttk.Label(spell_frame, text="Skill", font=('Helvetica', 8, 'bold')).grid(row=0, column=0, padx=5, pady=2, sticky="w")
+        ttk.Label(spell_frame, text="Level", font=('Helvetica', 8, 'bold')).grid(row=0, column=1, padx=2, pady=2)
+        ttk.Label(spell_frame, text="Rank", font=('Helvetica', 8, 'bold')).grid(row=0, column=2, padx=2, pady=2)
+        ttk.Label(spell_frame, text="Bonus", font=('Helvetica', 8, 'bold')).grid(row=0, column=3, padx=2, pady=2)
+        ttk.Label(spell_frame, text="TN", font=('Helvetica', 8, 'bold')).grid(row=0, column=4, padx=2, pady=2)
+
+        magic_schools = [
+            ("Alteration (Wp)", "alteration", "Wp"),
+            ("Conjuration (Wp)", "conjuration", "Wp"),
+            ("Destruction (Wp)", "destruction", "Wp"),
+            ("Illusion (Wp)", "illusion", "Wp"),
+            ("Mysticism (Wp)", "mysticism", "Wp"),
+            ("Necromancy (Int)", "necromancy", "Int"),
+            ("Restoration (Wp)", "restoration", "Wp")
+        ]
+
+        current_row = 1
+        for label_text, school_key, main_attr in magic_schools:
+            ttk.Label(spell_frame, text=label_text).grid(row=current_row, column=0, padx=5, pady=2, sticky="w")
+
+            level_cb = ttk.Combobox(spell_frame, values=list(self.skill_ranks_info.keys()), state="readonly", width=10)
+            level_cb.set("Untrained")
+            level_cb.grid(row=current_row, column=1, padx=2, pady=2)
+
+            rank_var = tk.StringVar(value="-1")
+            bonus_var = tk.StringVar(value="-20")
+            tn_var = tk.StringVar(value="0")
+
+            ttk.Entry(spell_frame, textvariable=rank_var, width=4, justify="center", state="readonly").grid(
+                row=current_row, column=2, padx=2, pady=2)
+            ttk.Entry(spell_frame, textvariable=bonus_var, width=5, justify="center", state="readonly").grid(
+                row=current_row, column=3, padx=2, pady=2)
+            ttk.Entry(spell_frame, textvariable=tn_var, width=5, justify="center", state="readonly").grid(
+                row=current_row, column=4, padx=2, pady=2)
+
+            self.spellcasting_vars[school_key] = {
+                "level_cb": level_cb,
+                "rank_var": rank_var,
+                "bonus_var": bonus_var,
+                "tn_var": tn_var,
+                "attr": main_attr
+            }
+
+            level_cb.bind("<<ComboboxSelected>>", lambda event, k=school_key: self.update_magic_skill_values(k))
+            self.update_magic_skill_values(school_key)
+            current_row += 1
+
+        # Sekcja: Custom Magic Skills
+        ttk.Separator(spell_frame, orient="horizontal").grid(row=current_row, column=0, columnspan=5, sticky="ew", pady=5)
+        current_row += 1
+
+        ttk.Label(spell_frame, text="Custom Magic Skills", font=('Helvetica', 8, 'bold')).grid(row=current_row, column=0, columnspan=5, padx=5, pady=2, sticky="w")
+        current_row += 1
+
+        custom_skills_container = ttk.Frame(spell_frame)
+        custom_skills_container.grid(row=current_row, column=0, columnspan=5, sticky="ew", padx=2)
+
+        def add_custom_skill_row():
+            r_frame = ttk.Frame(custom_skills_container)
+            r_frame.pack(fill="x", pady=1)
+
+            name_e = ttk.Entry(r_frame, width=15)
+            name_e.pack(side="left", padx=2)
+
+            attr_cb = ttk.Combobox(r_frame, values=["Wp", "Int"], width=3, state="readonly")
+            attr_cb.set("Wp")
+            attr_cb.pack(side="left", padx=2)
+
+            level_cb = ttk.Combobox(r_frame, values=list(self.skill_ranks_info.keys()), state="readonly", width=10)
+            level_cb.set("Untrained")
+            level_cb.pack(side="left", padx=2)
+
+            rank_var = tk.StringVar(value="-1")
+            bonus_var = tk.StringVar(value="-20")
+            tn_var = tk.StringVar(value="0")
+
+            ttk.Entry(r_frame, textvariable=rank_var, width=4, justify="center", state="readonly").pack(side="left", padx=2)
+            ttk.Entry(r_frame, textvariable=bonus_var, width=5, justify="center", state="readonly").pack(side="left", padx=2)
+            ttk.Entry(r_frame, textvariable=tn_var, width=5, justify="center", state="readonly").pack(side="left", padx=2)
+
+            row_data = {
+                "frame": r_frame,
+                "name": name_e,
+                "attr_cb": attr_cb,
+                "level_cb": level_cb,
+                "rank_var": rank_var,
+                "bonus_var": bonus_var,
+                "tn_var": tn_var
+            }
+
+            def update_custom_row():
+                lvl = level_cb.get()
+                rank, bonus = self.skill_ranks_info.get(lvl, (-1, -20))
+                rank_var.set(str(rank))
+                bonus_var.set(f"+{bonus}" if bonus >= 0 else str(bonus))
+
+                selected_attr = attr_cb.get()
+                attr_val_str = getattr(self, "attr_vars", {}).get(selected_attr, tk.StringVar(value="0")).get()
+                try:
+                    attr_val = int(attr_val_str)
+                except ValueError:
+                    attr_val = 0
+                tn_var.set(str(attr_val + bonus))
+
+            level_cb.bind("<<ComboboxSelected>>", lambda e: update_custom_row())
+            attr_cb.bind("<<ComboboxSelected>>", lambda e: update_custom_row())
+            update_custom_row()
+
+            del_btn = ttk.Button(r_frame, text="✕", width=2, command=lambda: remove_custom_skill(row_data))
+            del_btn.pack(side="right", padx=2)
+
+            self.custom_magic_skills.append(row_data)
+
+        def remove_custom_skill(row_data):
+            row_data["frame"].destroy()
+            self.custom_magic_skills.remove(row_data)
+
+        for _ in range(1):
+            add_custom_skill_row()
+
+        add_skill_btn = ttk.Button(spell_frame, text="+ Add Custom Skill", command=add_custom_skill_row)
+        add_skill_btn.grid(row=current_row + 1, column=0, columnspan=5, pady=5, padx=5, sticky="w")
+
+        # ==========================================
+        # 2. SPECIALIZATIONS
+        # ==========================================
+        spec_frame = ttk.LabelFrame(left_side, text="Specializations")
+        spec_frame.pack(fill="x", pady=(5, 10))
+
+        spec_container = ttk.Frame(spec_frame)
+        spec_container.pack(fill="x", expand=True, padx=5, pady=2)
+
+        def add_spec_row():
+            r_frame = ttk.Frame(spec_container)
+            r_frame.pack(fill="x", pady=1)
+
+            spec_entry = ttk.Entry(r_frame)
+            spec_entry.pack(side="left", fill="x", expand=True, padx=2)
+
+            row_data = {"frame": r_frame, "entry": spec_entry}
+
+            del_btn = ttk.Button(r_frame, text="✕", width=2, command=lambda: remove_spec_row(row_data))
+            del_btn.pack(side="right", padx=2)
+
+            self.specializations_vars.append(row_data)
+
+        def remove_spec_row(row_data):
+            row_data["frame"].destroy()
+            self.specializations_vars.remove(row_data)
+
+        for _ in range(1):
+            add_spec_row()
+
+        add_spec_btn = ttk.Button(spec_frame, text="+ Add Specialization", command=add_spec_row)
+        add_spec_btn.pack(anchor="w", padx=5, pady=5)
+
+        # ==========================================
+        # 3. RITUALS
+        # ==========================================
+        rituals_frame = ttk.LabelFrame(left_side, text="Rituals")
+        rituals_frame.pack(fill="x", pady=(0, 10))
+
+        rituals_container = ttk.Frame(rituals_frame)
+        rituals_container.pack(fill="x", expand=True, padx=5, pady=2)
+
+        r_header = ttk.Frame(rituals_container)
+        r_header.pack(fill="x", pady=(0, 2))
+        ttk.Label(r_header, text="Ritual Name", font=('Helvetica', 8, 'bold'), width=22).pack(side="left", padx=2)
+        ttk.Label(r_header, text="Effects / Notes", font=('Helvetica', 8, 'bold')).pack(side="left", padx=5)
+
+        r_rows_frame = ttk.Frame(rituals_container)
+        r_rows_frame.pack(fill="x", expand=True)
+
+        def add_ritual_row():
+            r_frame = ttk.Frame(r_rows_frame)
+            r_frame.pack(fill="x", pady=2)
+
+            name_entry = ttk.Entry(r_frame, width=22)
+            name_entry.pack(side="left", padx=2)
+
+            notes_entry = ttk.Entry(r_frame)
+            notes_entry.pack(side="left", fill="x", expand=True, padx=2)
+
+            row_data = {"frame": r_frame, "name": name_entry, "notes": notes_entry}
+
+            del_btn = ttk.Button(r_frame, text="✕", width=2, command=lambda: remove_ritual_row(row_data))
+            del_btn.pack(side="right", padx=2)
+
+            self.rituals_vars.append(row_data)
+
+        def remove_ritual_row(row_data):
+            row_data["frame"].destroy()
+            self.rituals_vars.remove(row_data)
+
+        for _ in range(1):
+            add_ritual_row()
+
+        add_ritual_btn = ttk.Button(rituals_frame, text="+ Add Ritual", command=add_ritual_row)
+        add_ritual_btn.pack(anchor="w", padx=5, pady=5)
+
+        # ==========================================
+        # 4. SPELLS (PRAWA STRONA - 3 W WIERSZU)
+        # ==========================================
+        spells_main_frame = ttk.LabelFrame(right_side, text="Spells")
+        spells_main_frame.pack(fill="both", expand=True, pady=(0, 10))
+
+        spells_grid_container = ttk.Frame(spells_main_frame)
+        spells_grid_container.pack(fill="both", expand=True, padx=5, pady=5)
+
+        def create_single_spell_card(parent_frame, row_ref):
+            card = ttk.LabelFrame(parent_frame, text="Spell Card")
+
+            header_frame = ttk.Frame(card)
+            header_frame.pack(fill="x", padx=2, pady=1)
+
+            del_btn = ttk.Button(header_frame, text="✕", width=2)
+            del_btn.pack(side="right")
+
+            body_frame = ttk.Frame(card)
+            body_frame.pack(fill="both", expand=True, padx=2, pady=2)
+
+            # Wiersz 1: Spell Name
+            ttk.Label(body_frame, text="Name:", font=('Helvetica', 8, 'bold')).grid(row=0, column=0, sticky="e", padx=1,
+                                                                                    pady=1)
+            name_entry = ttk.Entry(body_frame, width=34)
+            name_entry.grid(row=0, column=1, columnspan=3, sticky="ew", padx=1, pady=1)
+
+            # Wiersz 2: Cost & Skill
+            ttk.Label(body_frame, text="Cost:", font=('Helvetica', 8, 'bold')).grid(row=1, column=0, sticky="e", padx=1,
+                                                                                    pady=1)
+            cost_entry = ttk.Entry(body_frame, width=5)
+            cost_entry.grid(row=1, column=1, sticky="w", padx=1, pady=1)
+
+            ttk.Label(body_frame, text="Skill:", font=('Helvetica', 8, 'bold')).grid(row=1, column=2, sticky="e",
+                                                                                     padx=1, pady=1)
+            skill_entry = ttk.Entry(body_frame, width=8)
+            skill_entry.grid(row=1, column=3, sticky="ew", padx=1, pady=1)
+
+            # Wiersz 3: Range & Target
+            ttk.Label(body_frame, text="Range:", font=('Helvetica', 8, 'bold')).grid(row=2, column=0, sticky="e",
+                                                                                     padx=1, pady=1)
+            range_entry = ttk.Entry(body_frame, width=5)
+            range_entry.grid(row=2, column=1, sticky="w", padx=1, pady=1)
+
+            ttk.Label(body_frame, text="Target:", font=('Helvetica', 8, 'bold')).grid(row=2, column=2, sticky="e",
+                                                                                      padx=1, pady=1)
+            target_entry = ttk.Entry(body_frame, width=8)
+            target_entry.grid(row=2, column=3, sticky="ew", padx=1, pady=1)
+
+            # Wiersz 4: Duration & Resistance
+            ttk.Label(body_frame, text="Duration:", font=('Helvetica', 8, 'bold')).grid(row=3, column=0, sticky="e",
+                                                                                        padx=1, pady=1)
+            duration_entry = ttk.Entry(body_frame, width=5)
+            duration_entry.grid(row=3, column=1, sticky="w", padx=1, pady=1)
+
+            ttk.Label(body_frame, text="Resist:", font=('Helvetica', 8, 'bold')).grid(row=3, column=2, sticky="e",
+                                                                                      padx=1, pady=1)
+            resist_entry = ttk.Entry(body_frame, width=8)
+            resist_entry.grid(row=3, column=3, sticky="ew", padx=1, pady=1)
+
+            # Wiersz 5: Effect / Notes
+            ttk.Label(body_frame, text="Effect:", font=('Helvetica', 8, 'bold')).grid(row=4, column=0, sticky="ne",
+                                                                                      padx=1, pady=2)
+            effect_text = tk.Text(body_frame, height=3, width=16, wrap="word")
+            effect_text.grid(row=4, column=1, columnspan=3, sticky="ew", padx=1, pady=2)
+
+            card_data = {
+                "card_frame": card,
+                "del_btn": del_btn,
+                "name": name_entry,
+                "cost": cost_entry,
+                "skill": skill_entry,
+                "range": range_entry,
+                "target": target_entry,
+                "duration": duration_entry,
+                "resist": resist_entry,
+                "effect": effect_text
+            }
+
+            def remove_this_card():
+                card.destroy()
+                row_ref["active_cards"] -= 1
+                # Jeśli w wierszu nie zostanie żadna karta, usuwamy cały kontener wiersza
+                if row_ref["active_cards"] <= 0:
+                    row_ref["row_frame"].destroy()
+                    if row_ref in self.spells_vars:
+                        self.spells_vars.remove(row_ref)
+
+            del_btn.config(command=remove_this_card)
+            return card_data
+
+        def add_spell_trio_row():
+            row_frame = ttk.Frame(spells_grid_container)
+            row_frame.pack(fill="x", pady=2)
+
+            row_data = {
+                "row_frame": row_frame,
+                "active_cards": 3,
+                "cards": []
+            }
+
+            # Tworzymy 3 karty obok siebie
+            for _ in range(3):
+                card_data = create_single_spell_card(row_frame, row_data)
+                card_data["card_frame"].pack(side="left", fill="both", expand=True, padx=2)
+                row_data["cards"].append(card_data)
+
+            self.spells_vars.append(row_data)
+
+        # Domyślnie dodaj 2 wiersze po 3 zaklęcia (łącznie 6 kart)
+        for _ in range(2):
+            add_spell_trio_row()
+
+        add_spell_btn = ttk.Button(spells_main_frame, text="+ Add 3 Spells Row", command=add_spell_trio_row)
+        add_spell_btn.pack(anchor="w", padx=5, pady=5)
+
+    def update_magic_skill_values(self, school_key):
+        """Pomocnicza funkcja licząca Rank, Bonus i TN dla szkół magii."""
+        if not hasattr(self, 'spellcasting_vars') or school_key not in self.spellcasting_vars:
+            return
+
+        data = self.spellcasting_vars[school_key]
+        selected_level = data["level_cb"].get()
+
+        rank, bonus = getattr(self, 'skill_ranks_info', {}).get(selected_level, (-1, -20))
+
+        data["rank_var"].set(str(rank))
+        data["bonus_var"].set(f"+{bonus}" if bonus >= 0 else str(bonus))
+
+        attr_key = data["attr"]
+        attr_val_str = getattr(self, "attr_vars", {}).get(attr_key, tk.StringVar(value="0")).get()
+        try:
+            attr_val = int(attr_val_str)
+        except ValueError:
+            attr_val = 0
+
+        data["tn_var"].set(str(attr_val + bonus))
 if __name__ == "__main__":
     app = UESRPGCharacterSheet()
     app.mainloop()
