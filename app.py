@@ -23,17 +23,18 @@ class UESRPGCharacterSheet(tk.Tk):
         notebook.add(tab1, text="Page 1: Character and Attributes")
         notebook.add(tab2, text="Page 2: Skills")
         notebook.add(tab3, text="Page 3: Armor and Weapons")
-        notebook.add(tab4, text="Page 4: Talents, Traits, & Powers")
-        notebook.add(tab5, text="Page 5: Items & Equipment")
+        notebook.add(tab4, text="Page 4: Items & Equipment")
+        notebook.add(tab5, text="Page 5: Talents, Traits, & Powers")
         notebook.add(tab6, text="Page 6: Spellcasting")
 
         self.setup_tab1(tab1)
         self.setup_tab2(tab2)
-        # self.setup_tab3(tab3)
+        self.setup_tab3(tab3)
         # self.setup_tab4(tab4)
         # self.setup_tab5(tab5)
         # self.setup_tab6(tab6)
 
+# ---------------PAGE1------------------
     def setup_tab1(self, parent):
         # Nagłówek - Dane podstawowe
         header_frame = ttk.LabelFrame(parent, text="Character Sheet")
@@ -514,6 +515,177 @@ class UESRPGCharacterSheet(tk.Tk):
 
         if hasattr(self, 'cs_level_cb'):
             self.update_cs_values()
+#---------------PAGE3------------------
+    def setup_tab3(self, parent):
+        # Główny kontener dzielący ekran na lewy i prawy
+        main_container = ttk.Frame(parent)
+        main_container.pack(fill="both", expand=True, padx=10, pady=5)
+
+        left_side = ttk.Frame(main_container)
+        left_side.pack(side="left", fill="both", expand=True, padx=(0, 5))
+
+        right_side = ttk.Frame(main_container)
+        right_side.pack(side="right", fill="both", expand=True, padx=(5, 0))
+
+        # ==========================================
+        # LEWA STRONA: ARMOR, SHIELD, NOTES
+        # ==========================================
+        armor_frame = ttk.LabelFrame(left_side, text="Armor")
+        armor_frame.pack(fill="x", padx=0, pady=(0, 5))
+
+        armor_frame.columnconfigure(0, weight=1)
+        armor_frame.columnconfigure(1, weight=1)
+        armor_frame.columnconfigure(2, weight=1)
+
+        left_zones = [
+            ("Head (0)", "head"),
+            ("Right Arm (8)", "r_arm"),
+            ("Right Leg (6)", "r_leg")
+        ]
+
+        right_zones = [
+            ("Body (1-5)", "body"),
+            ("Left Arm (9)", "l_arm"),
+            ("Left Leg (7)", "l_leg")
+        ]
+
+        self.armor_vars = {}
+
+        # 1. Lewa strefa pancerza
+        left_arm_container = ttk.Frame(armor_frame)
+        left_arm_container.grid(row=0, column=0, padx=5, pady=5, sticky="n")
+
+        for label_text, zone_key in left_zones:
+            z_frame = ttk.LabelFrame(left_arm_container, text=label_text)
+            z_frame.pack(fill="x", pady=2)
+
+            self.armor_vars[zone_key] = {
+                "ar": tk.StringVar(),
+                "enc": tk.StringVar(),
+                "type": tk.StringVar()
+            }
+
+            ttk.Label(z_frame, text="AR:").grid(row=0, column=0, padx=2, pady=1, sticky="e")
+            ttk.Entry(z_frame, textvariable=self.armor_vars[zone_key]["ar"], width=8).grid(row=0, column=1, padx=2,
+                                                                                           pady=1)
+
+            ttk.Label(z_frame, text="ENC:").grid(row=1, column=0, padx=2, pady=1, sticky="e")
+            ttk.Entry(z_frame, textvariable=self.armor_vars[zone_key]["enc"], width=8).grid(row=1, column=1, padx=2,
+                                                                                            pady=1)
+
+            ttk.Label(z_frame, text="Type:").grid(row=2, column=0, padx=2, pady=1, sticky="e")
+            ttk.Entry(z_frame, textvariable=self.armor_vars[zone_key]["type"], width=8).grid(row=2, column=1, padx=2,
+                                                                                             pady=1)
+
+        # 2. Środek (Placeholder graficzny)
+        center_arm_container = ttk.Frame(armor_frame)
+        center_arm_container.grid(row=0, column=1, padx=5, pady=5, sticky="nsew")
+
+        body_canvas = tk.Canvas(center_arm_container, width=120, height=240, bg="#f0f0f0", highlightthickness=1,
+                                highlightbackground="#ccc")
+        body_canvas.pack(expand=True)
+        body_canvas.create_text(60, 120, text="[ Character ]", fill="#888888", justify="center")
+
+        # 3. Prawa strefa pancerza
+        right_arm_container = ttk.Frame(armor_frame)
+        right_arm_container.grid(row=0, column=2, padx=5, pady=5, sticky="n")
+
+        for label_text, zone_key in right_zones:
+            z_frame = ttk.LabelFrame(right_arm_container, text=label_text)
+            z_frame.pack(fill="x", pady=2)
+
+            self.armor_vars[zone_key] = {
+                "ar": tk.StringVar(),
+                "enc": tk.StringVar(),
+                "type": tk.StringVar()
+            }
+
+            ttk.Label(z_frame, text="AR:").grid(row=0, column=0, padx=2, pady=1, sticky="e")
+            ttk.Entry(z_frame, textvariable=self.armor_vars[zone_key]["ar"], width=8).grid(row=0, column=1, padx=2,
+                                                                                           pady=1)
+
+            ttk.Label(z_frame, text="ENC:").grid(row=1, column=0, padx=2, pady=1, sticky="e")
+            ttk.Entry(z_frame, textvariable=self.armor_vars[zone_key]["enc"], width=8).grid(row=1, column=1, padx=2,
+                                                                                            pady=1)
+
+            ttk.Label(z_frame, text="Type:").grid(row=2, column=0, padx=2, pady=1, sticky="e")
+            ttk.Entry(z_frame, textvariable=self.armor_vars[zone_key]["type"], width=8).grid(row=2, column=1, padx=2,
+                                                                                             pady=1)
+
+        # 4. Shield
+        shield_frame = ttk.Frame(armor_frame)
+        shield_frame.grid(row=1, column=0, columnspan=3, padx=5, pady=(2, 5), sticky="ew")
+
+        ttk.Label(shield_frame, text="Shield (BR/Type/ENC):", font=('Helvetica', 8, 'bold')).pack(side="left",
+                                                                                                  padx=(0, 2))
+        self.shield_var = tk.StringVar()
+        ttk.Entry(shield_frame, textvariable=self.shield_var).pack(side="left", fill="x", expand=True)
+
+        # Sekcje tekstowe
+        notes_frame = ttk.LabelFrame(left_side, text="Armor Notes")
+        notes_frame.pack(fill="x", pady=2)
+        self.armor_notes_text = tk.Text(notes_frame, height=4, wrap="word")
+        self.armor_notes_text.pack(fill="both", expand=True, padx=2, pady=2)
+
+        wounds_frame = ttk.LabelFrame(left_side, text="Wounds")
+        wounds_frame.pack(fill="x", pady=2)
+        self.wounds_text = tk.Text(wounds_frame, height=4, wrap="word")
+        self.wounds_text.pack(fill="both", expand=True, padx=2, pady=2)
+
+        conditions_frame = ttk.LabelFrame(left_side, text="Conditions")
+        conditions_frame.pack(fill="x", pady=2)
+        self.conditions_text = tk.Text(conditions_frame, height=4, wrap="word")
+        self.conditions_text.pack(fill="both", expand=True, padx=2, pady=2)
+
+        # ==========================================
+        # PRAWA STRONA: WEAPONS (MELEE & RANGED)
+        # ==========================================
+        dmg_options = ["1d4", "1d6", "1d8", "1d10", "1d12", "2d8", "2d10", "2d12"]
+        bonus_mat_options = [f"+{i}" for i in range(0, 11)]
+
+        self.weapons_vars = {"melee": [], "ranged": []}
+
+        # Funkcja pomocnicza do budowania tabeli broni
+        def build_weapon_table(parent_frame, title, category_key):
+            frame = ttk.LabelFrame(parent_frame, text=title)
+            frame.pack(fill="x", pady=(0, 5))
+
+            headers = ["Name", "Dmg", "Mat. Bonus", "H", "Reach", "ENC"]
+            for col_idx, h in enumerate(headers):
+                ttk.Label(frame, text=h, font=('Helvetica', 8, 'bold')).grid(row=0, column=col_idx, padx=2, pady=2)
+
+            for row_idx in range(1, 6):  # 3 wiersze na kategorię
+                name_entry = ttk.Entry(frame, width=50)
+                name_entry.grid(row=row_idx, column=0, padx=2, pady=2)
+
+                dmg_cb = ttk.Combobox(frame, values=dmg_options, state="readonly", width=6)
+                dmg_cb.set("1d4")
+                dmg_cb.grid(row=row_idx, column=1, padx=2, pady=2)
+
+                mat_cb = ttk.Combobox(frame, values=bonus_mat_options, state="readonly", width=5)
+                mat_cb.set("0")
+                mat_cb.grid(row=row_idx, column=2, padx=2, pady=2)
+
+                h_entry = ttk.Entry(frame, width=4, justify="center")
+                h_entry.grid(row=row_idx, column=3, padx=2, pady=2)
+
+                reach_entry = ttk.Entry(frame, width=6, justify="center")
+                reach_entry.grid(row=row_idx, column=4, padx=2, pady=2)
+
+                enc_entry = ttk.Entry(frame, width=5, justify="center")
+                enc_entry.grid(row=row_idx, column=5, padx=2, pady=2)
+
+                self.weapons_vars[category_key].append({
+                    "name": name_entry,
+                    "dmg": dmg_cb,
+                    "mat_bonus": mat_cb,
+                    "h": h_entry,
+                    "reach": reach_entry,
+                    "enc": enc_entry
+                })
+
+        build_weapon_table(right_side, "Melee Weapons", "melee")
+        build_weapon_table(right_side, "Ranged Weapons", "ranged")
 if __name__ == "__main__":
     app = UESRPGCharacterSheet()
     app.mainloop()
