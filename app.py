@@ -1,6 +1,33 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 
+class CollapsibleFrame(ttk.LabelFrame):
+    def __init__(self, parent, title="", *args, **kwargs):
+        super().__init__(parent, *args, **kwargs)
+
+        self.is_expanded = True
+        self.title = title
+
+        self.toggle_btn = ttk.Button(
+            self,
+            text=f"▼ {self.title}",
+            command=self.toggle,
+            style="Toolbutton"
+        )
+        self.toggle_btn.pack(fill="x", padx=5, pady=2)
+
+        self.content_frame = ttk.Frame(self)
+        self.content_frame.pack(fill="both", expand=True, padx=5, pady=2)
+
+    def toggle(self):
+        if self.is_expanded:
+            self.content_frame.pack_forget()
+            self.toggle_btn.configure(text=f"► {self.title}")
+            self.is_expanded = False
+        else:
+            self.content_frame.pack(fill="both", expand=True, padx=5, pady=2)
+            self.toggle_btn.configure(text=f"▼ {self.title}")
+            self.is_expanded = True
 
 class UESRPGCharacterSheet(tk.Tk):
     def __init__(self):
@@ -31,7 +58,7 @@ class UESRPGCharacterSheet(tk.Tk):
         self.setup_tab2(tab2)
         self.setup_tab3(tab3)
         self.setup_tab4(tab4)
-        # self.setup_tab5(tab5)
+        self.setup_tab5(tab5)
         # self.setup_tab6(tab6)
 
 # ---------------PAGE1------------------
@@ -905,6 +932,88 @@ class UESRPGCharacterSheet(tk.Tk):
             self.total_enc_var.set(str(int(total)))
         else:
             self.total_enc_var.set(f"{total:.1f}")
+# ---------------PAGE5------------------
+    def setup_tab5(self, parent):
+        main_canvas = tk.Canvas(parent, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=main_canvas.yview)
+
+        scrollable_frame = ttk.Frame(main_canvas)
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: main_canvas.configure(scrollregion=main_canvas.bbox("all"))
+        )
+
+        main_canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        main_canvas.configure(yscrollcommand=scrollbar.set)
+
+        main_canvas.pack(side="left", fill="both", expand=True, padx=5, pady=5)
+        scrollbar.pack(side="right", fill="y")
+
+        self.ttp_data = {
+            "talents": [],
+            "traits": [],
+            "powers": []
+        }
+
+        self._build_collapsible_section(scrollable_frame, "Talents", "talents")
+        self._build_collapsible_section(scrollable_frame, "Traits", "traits")
+        self._build_collapsible_section(scrollable_frame, "Powers", "powers")
+
+    def _build_collapsible_section(self, parent, section_title, category_key):
+        collapsible = CollapsibleFrame(parent, title=section_title)
+        collapsible.pack(fill="x", expand=True, padx=5, pady=5)
+
+        container = collapsible.content_frame
+
+        headers_frame = ttk.Frame(container)
+        headers_frame.pack(fill="x", pady=(0, 2))
+
+        ttk.Label(headers_frame, text=f"{section_title} Name", font=('Helvetica', 9, 'bold'), width=100).pack(
+            side="left", padx=2)
+        ttk.Label(headers_frame, text="Effects / Notes", font=('Helvetica', 9, 'bold')).pack(side="left", padx=5)
+
+        rows_container = ttk.Frame(container)
+        rows_container.pack(fill="x", expand=True)
+
+        add_btn = ttk.Button(
+            container,
+            text=f"+ Add {section_title[:-1] if section_title.endswith('s') else section_title}",
+            command=lambda: self._add_ttp_row(rows_container, category_key)
+        )
+        add_btn.pack(anchor="w", pady=5, padx=2)
+
+        for _ in range(3):
+            self._add_ttp_row(rows_container, category_key)
+
+    def _add_ttp_row(self, container, category_key):
+        row_frame = ttk.Frame(container)
+        row_frame.pack(fill="x", pady=2)
+
+        name_entry = ttk.Entry(row_frame, width=25)
+        name_entry.pack(side="left", padx=2)
+
+        effect_entry = ttk.Entry(row_frame)
+        effect_entry.pack(side="left", fill="x", expand=True, padx=2)
+
+        row_data = {
+            "frame": row_frame,
+            "name": name_entry,
+            "effect": effect_entry
+        }
+
+        remove_btn = ttk.Button(
+            row_frame,
+            text="✕",
+            width=3,
+            command=lambda: self._remove_ttp_row(category_key, row_data)
+        )
+        remove_btn.pack(side="right", padx=2)
+
+        self.ttp_data[category_key].append(row_data)
+
+    def _remove_ttp_row(self, category_key, row_data):
+        row_data["frame"].destroy()
+        self.ttp_data[category_key].remove(row_data)
 if __name__ == "__main__":
     app = UESRPGCharacterSheet()
     app.mainloop()
