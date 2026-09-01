@@ -30,7 +30,7 @@ class UESRPGCharacterSheet(tk.Tk):
         self.setup_tab1(tab1)
         self.setup_tab2(tab2)
         self.setup_tab3(tab3)
-        # self.setup_tab4(tab4)
+        self.setup_tab4(tab4)
         # self.setup_tab5(tab5)
         # self.setup_tab6(tab6)
 
@@ -638,54 +638,273 @@ class UESRPGCharacterSheet(tk.Tk):
         self.conditions_text.pack(fill="both", expand=True, padx=2, pady=2)
 
         # ==========================================
-        # PRAWA STRONA: WEAPONS (MELEE & RANGED)
+        # PRAWA STRONA: WEAPONS & AMMUNITION
         # ==========================================
         dmg_options = ["1d4", "1d6", "1d8", "1d10", "1d12", "2d8", "2d10", "2d12"]
         bonus_mat_options = [f"+{i}" for i in range(0, 11)]
+        h_options = ["1H", "2H"]
 
-        self.weapons_vars = {"melee": [], "ranged": []}
+        self.weapons_vars = {"melee": [], "ranged": [], "ammo": []}
 
-        # Funkcja pomocnicza do budowania tabeli broni
         def build_weapon_table(parent_frame, title, category_key):
             frame = ttk.LabelFrame(parent_frame, text=title)
             frame.pack(fill="x", pady=(0, 5))
 
-            headers = ["Name", "Dmg", "Mat. Bonus", "H", "Reach", "ENC"]
-            for col_idx, h in enumerate(headers):
-                ttk.Label(frame, text=h, font=('Helvetica', 8, 'bold')).grid(row=0, column=col_idx, padx=2, pady=2)
+            if category_key == "melee":
+                headers = ["Name", "Dmg", "Mat. Bonus", "H", "Reach", "ENC"]
+                for col_idx, h in enumerate(headers):
+                    ttk.Label(frame, text=h, font=('Helvetica', 8, 'bold')).grid(row=0, column=col_idx, padx=2, pady=2)
 
-            for row_idx in range(1, 6):  # 3 wiersze na kategorię
-                name_entry = ttk.Entry(frame, width=50)
-                name_entry.grid(row=row_idx, column=0, padx=2, pady=2)
+                current_row = 1
+                for _ in range(4):
+                    name_entry = ttk.Entry(frame, width=50)
+                    name_entry.grid(row=current_row, column=0, padx=2, pady=2, sticky="ew")
 
-                dmg_cb = ttk.Combobox(frame, values=dmg_options, state="readonly", width=6)
-                dmg_cb.set("1d4")
-                dmg_cb.grid(row=row_idx, column=1, padx=2, pady=2)
+                    dmg_cb = ttk.Combobox(frame, values=dmg_options, state="readonly", width=6)
+                    dmg_cb.set("1d4")
+                    dmg_cb.grid(row=current_row, column=1, padx=2, pady=2)
 
-                mat_cb = ttk.Combobox(frame, values=bonus_mat_options, state="readonly", width=5)
-                mat_cb.set("0")
-                mat_cb.grid(row=row_idx, column=2, padx=2, pady=2)
+                    mat_cb = ttk.Combobox(frame, values=bonus_mat_options, state="readonly", width=5)
+                    mat_cb.set("+0")
+                    mat_cb.grid(row=current_row, column=2, padx=2, pady=2)
 
-                h_entry = ttk.Entry(frame, width=4, justify="center")
-                h_entry.grid(row=row_idx, column=3, padx=2, pady=2)
+                    h_cb = ttk.Combobox(frame, values=h_options, state="readonly", width=4)
+                    h_cb.set("1H")
+                    h_cb.grid(row=current_row, column=3, padx=2, pady=2)
 
-                reach_entry = ttk.Entry(frame, width=6, justify="center")
-                reach_entry.grid(row=row_idx, column=4, padx=2, pady=2)
+                    reach_entry = ttk.Entry(frame, width=6, justify="center")
+                    reach_entry.grid(row=current_row, column=4, padx=2, pady=2)
 
-                enc_entry = ttk.Entry(frame, width=5, justify="center")
-                enc_entry.grid(row=row_idx, column=5, padx=2, pady=2)
+                    enc_entry = ttk.Entry(frame, width=5, justify="center")
+                    enc_entry.grid(row=current_row, column=5, padx=2, pady=2)
 
-                self.weapons_vars[category_key].append({
-                    "name": name_entry,
-                    "dmg": dmg_cb,
-                    "mat_bonus": mat_cb,
-                    "h": h_entry,
-                    "reach": reach_entry,
-                    "enc": enc_entry
-                })
+                    current_row += 1
 
+                    qualities_frame = ttk.Frame(frame)
+                    qualities_frame.grid(row=current_row, column=0, columnspan=6, padx=5, pady=(0, 6), sticky="ew")
+
+                    crushing_var = tk.BooleanVar()
+                    splitting_var = tk.BooleanVar()
+                    slashing_var = tk.BooleanVar()
+
+                    ttk.Checkbutton(qualities_frame, text="Crushing", variable=crushing_var).pack(side="left",
+                                                                                                  padx=(0, 4))
+                    ttk.Checkbutton(qualities_frame, text="Splitting", variable=splitting_var).pack(side="left", padx=4)
+                    ttk.Checkbutton(qualities_frame, text="Slashing", variable=slashing_var).pack(side="left", padx=4)
+
+                    ttk.Label(qualities_frame, text="Other:").pack(side="left", padx=(8, 2))
+                    other_qualities_entry = ttk.Entry(qualities_frame)
+                    other_qualities_entry.pack(side="left", fill="x", expand=True, padx=(0, 2))
+
+                    ttk.Separator(frame, orient="horizontal").grid(row=current_row + 1, column=0, columnspan=6,
+                                                                   sticky="ew", pady=2)
+                    current_row += 2
+
+                    self.weapons_vars["melee"].append({
+                        "name": name_entry,
+                        "dmg": dmg_cb,
+                        "mat_bonus": mat_cb,
+                        "h": h_cb,
+                        "reach": reach_entry,
+                        "enc": enc_entry,
+                        "qualities": {
+                            "crushing": crushing_var,
+                            "splitting": splitting_var,
+                            "slashing": slashing_var,
+                            "other": other_qualities_entry
+                        }
+                    })
+
+            elif category_key == "ranged":
+                headers = ["Type", "Dmg", "H", "Range (Short / Med / Long)", "ENC"]
+                for col_idx, h in enumerate(headers):
+                    ttk.Label(frame, text=h, font=('Helvetica', 8, 'bold')).grid(row=0, column=col_idx, padx=2, pady=2)
+
+                current_row = 1
+                for _ in range(4):
+                    type_entry = ttk.Entry(frame, width=45)
+                    type_entry.grid(row=current_row, column=0, padx=2, pady=2, sticky="ew")
+
+                    dmg_cb = ttk.Combobox(frame, values=dmg_options, state="readonly", width=6)
+                    dmg_cb.set("1d4")
+                    dmg_cb.grid(row=current_row, column=1, padx=2, pady=2)
+
+                    h_cb = ttk.Combobox(frame, values=h_options, state="readonly", width=4)
+                    h_cb.set("2H")
+                    h_cb.grid(row=current_row, column=2, padx=2, pady=2)
+
+                    range_frame = ttk.Frame(frame)
+                    range_frame.grid(row=current_row, column=3, padx=2, pady=2)
+
+                    r1_entry = ttk.Entry(range_frame, width=4, justify="center")
+                    r1_entry.pack(side="left")
+                    ttk.Label(range_frame, text="/").pack(side="left")
+
+                    r2_entry = ttk.Entry(range_frame, width=4, justify="center")
+                    r2_entry.pack(side="left")
+                    ttk.Label(range_frame, text="/").pack(side="left")
+
+                    r3_entry = ttk.Entry(range_frame, width=4, justify="center")
+                    r3_entry.pack(side="left")
+
+                    enc_entry = ttk.Entry(frame, width=5, justify="center")
+                    enc_entry.grid(row=current_row, column=4, padx=2, pady=2)
+
+                    current_row += 1
+
+                    qualities_frame = ttk.Frame(frame)
+                    qualities_frame.grid(row=current_row, column=0, columnspan=5, padx=5, pady=(0, 6), sticky="ew")
+
+                    ttk.Label(qualities_frame, text="Qualities:").pack(side="left", padx=(0, 5))
+                    qualities_entry = ttk.Entry(qualities_frame)
+                    qualities_entry.pack(side="left", fill="x", expand=True, padx=(0, 2))
+
+                    ttk.Separator(frame, orient="horizontal").grid(row=current_row + 1, column=0, columnspan=5,
+                                                                   sticky="ew", pady=2)
+                    current_row += 2
+
+                    self.weapons_vars["ranged"].append({
+                        "type": type_entry,
+                        "dmg": dmg_cb,
+                        "h": h_cb,
+                        "range_short": r1_entry,
+                        "range_med": r2_entry,
+                        "range_long": r3_entry,
+                        "qualities": qualities_entry,
+                        "enc": enc_entry
+                    })
+
+            elif category_key == "ammo":
+                headers = ["Qty", "Name", "Dam Mod", "Qualities", "ENC"]
+                for col_idx, h in enumerate(headers):
+                    ttk.Label(frame, text=h, font=('Helvetica', 8, 'bold')).grid(row=0, column=col_idx, padx=2, pady=2)
+
+                frame.columnconfigure(1, weight=1)  # Nazwa amunicji dostosowuje szerokość
+                frame.columnconfigure(3, weight=1)  # Qualities dostosowuje szerokość
+
+                for row_idx in range(1, 5):  # 3 wiersze amunicji
+                    qty_entry = ttk.Entry(frame, width=4, justify="center")
+                    qty_entry.grid(row=row_idx, column=0, padx=2, pady=2)
+
+                    name_entry = ttk.Entry(frame, width=15)
+                    name_entry.grid(row=row_idx, column=1, padx=2, pady=2, sticky="ew")
+
+                    dam_mod_entry = ttk.Entry(frame, width=8, justify="center")
+                    dam_mod_entry.grid(row=row_idx, column=2, padx=2, pady=2)
+
+                    qualities_entry = ttk.Entry(frame, width=18)
+                    qualities_entry.grid(row=row_idx, column=3, padx=2, pady=2, sticky="ew")
+
+                    enc_entry = ttk.Entry(frame, width=5, justify="center")
+                    enc_entry.grid(row=row_idx, column=4, padx=2, pady=2)
+
+                    self.weapons_vars["ammo"].append({
+                        "qty": qty_entry,
+                        "name": name_entry,
+                        "dam_mod": dam_mod_entry,
+                        "qualities": qualities_entry,
+                        "enc": enc_entry
+                    })
+
+        # Wywołania budujące wszystkie 3 sekcje:
         build_weapon_table(right_side, "Melee Weapons", "melee")
         build_weapon_table(right_side, "Ranged Weapons", "ranged")
+        build_weapon_table(right_side, "Ammunition Materials", "ammo")
+
+# ---------------PAGE4------------------
+    def setup_tab4(self, parent):
+        # Główny kontener strony 4: Items & Equipment
+        main_container = ttk.Frame(parent)
+        main_container.pack(fill="both", expand=True, padx=10, pady=5)
+
+        eq_frame = ttk.LabelFrame(main_container, text="Items & Equipment")
+        eq_frame.pack(fill="both", expand=True, padx=5, pady=5)
+
+        eq_frame.columnconfigure(0, weight=1)
+        eq_frame.columnconfigure(1, weight=1)
+
+        self.equipment_vars = []
+
+        # 1. LEWA STRONA: Items & Equipment (14 wierszy)
+        left_eq_frame = ttk.Frame(eq_frame)
+        left_eq_frame.grid(row=0, column=0, padx=10, pady=5, sticky="nsew")
+        left_eq_frame.columnconfigure(1, weight=1)  # Nazwa przedmiotu rozciąga się w poziomie
+
+        ttk.Label(left_eq_frame, text="Qty", font=('Helvetica', 9, 'bold')).grid(row=0, column=0, padx=2, pady=2)
+        ttk.Label(left_eq_frame, text="Items & Equipment", font=('Helvetica', 9, 'bold')).grid(row=0, column=1, padx=2,
+                                                                                               pady=2, sticky="w")
+        ttk.Label(left_eq_frame, text="ENC", font=('Helvetica', 9, 'bold')).grid(row=0, column=2, padx=2, pady=2)
+
+        for i in range(1, 15):
+            qty_entry = ttk.Entry(left_eq_frame, width=4, justify="center")
+            qty_entry.grid(row=i, column=0, padx=2, pady=1)
+
+            item_entry = ttk.Entry(left_eq_frame)
+            item_entry.grid(row=i, column=1, padx=2, pady=1, sticky="ew")
+
+            enc_var = tk.StringVar()
+            enc_entry = ttk.Entry(left_eq_frame, textvariable=enc_var, width=6, justify="center")
+            enc_entry.grid(row=i, column=2, padx=2, pady=1)
+
+            enc_var.trace_add("write", lambda *args: self.calculate_total_enc())
+            self.equipment_vars.append(enc_var)
+
+        # 2. PRAWA STRONA: Items & Equipment (Cont.) (12 wierszy + podsumowanie)
+        right_eq_frame = ttk.Frame(eq_frame)
+        right_eq_frame.grid(row=0, column=1, padx=10, pady=5, sticky="nsew")
+        right_eq_frame.columnconfigure(1, weight=1)
+
+        ttk.Label(right_eq_frame, text="Qty", font=('Helvetica', 9, 'bold')).grid(row=0, column=0, padx=2, pady=2)
+        ttk.Label(right_eq_frame, text="Items & Equipment (Cont.)", font=('Helvetica', 9, 'bold')).grid(row=0, column=1,
+                                                                                                        padx=2, pady=2,
+                                                                                                        sticky="w")
+        ttk.Label(right_eq_frame, text="ENC", font=('Helvetica', 9, 'bold')).grid(row=0, column=2, padx=2, pady=2)
+
+        for i in range(1, 13):
+            qty_entry = ttk.Entry(right_eq_frame, width=4, justify="center")
+            qty_entry.grid(row=i, column=0, padx=2, pady=1)
+
+            item_entry = ttk.Entry(right_eq_frame)
+            item_entry.grid(row=i, column=1, padx=2, pady=1, sticky="ew")
+
+            enc_var = tk.StringVar()
+            enc_entry = ttk.Entry(right_eq_frame, textvariable=enc_var, width=6, justify="center")
+            enc_entry.grid(row=i, column=2, padx=2, pady=1)
+
+            enc_var.trace_add("write", self.calculate_total_enc)
+            self.equipment_vars.append(enc_var)
+
+        # 3. PODSUMOWANIE (Total ENC & Drakes)
+        summary_frame = ttk.Frame(right_eq_frame)
+        summary_frame.grid(row=13, column=0, columnspan=3, padx=2, pady=(15, 5), sticky="e")
+
+        ttk.Label(summary_frame, text="Total ENC:", font=('Helvetica', 9, 'bold')).grid(row=0, column=0, padx=5, pady=2,
+                                                                                        sticky="e")
+        self.total_enc_var = tk.StringVar(value="0")
+        ttk.Entry(summary_frame, textvariable=self.total_enc_var, width=8, justify="center", state="readonly").grid(
+            row=0, column=1, padx=2, pady=2)
+
+        ttk.Label(summary_frame, text="Drakes:", font=('Helvetica', 9, 'bold')).grid(row=1, column=0, padx=5, pady=2,
+                                                                                     sticky="e")
+        self.drakes_var = tk.StringVar(value="0")
+        ttk.Entry(summary_frame, textvariable=self.drakes_var, width=10, justify="center").grid(row=1, column=1, padx=2,
+                                                                                                pady=2)
+
+    def calculate_total_enc(self, *args):
+        """Dynamicznie sumuje punkty obciążenia ze wszystkich pól ekwipunku."""
+        total = 0.0
+        for enc_var in self.equipment_vars:
+            val_str = enc_var.get().strip().replace(',', '.')
+            if val_str:
+                try:
+                    total += float(val_str)
+                except ValueError:
+                    pass
+
+        if total.is_integer():
+            self.total_enc_var.set(str(int(total)))
+        else:
+            self.total_enc_var.set(f"{total:.1f}")
 if __name__ == "__main__":
     app = UESRPGCharacterSheet()
     app.mainloop()
