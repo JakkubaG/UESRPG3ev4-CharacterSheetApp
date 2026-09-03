@@ -1,5 +1,6 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
+import json
 
 class CollapsibleFrame(ttk.LabelFrame):
     def __init__(self, parent, title="", *args, **kwargs):
@@ -35,11 +36,9 @@ class UESRPGCharacterSheet(tk.Tk):
         self.title("CHARACTER SHEET - 3ev4")
         self.geometry("1280x720")
 
-        # Kontroler zakładek (Notebook)
         notebook = ttk.Notebook(self)
         notebook.pack(fill="both", expand=True)
 
-        # Tworzenie zakładek dla stron karty
         tab1 = ttk.Frame(notebook)
         tab2 = ttk.Frame(notebook)
         tab3 = ttk.Frame(notebook)
@@ -60,14 +59,16 @@ class UESRPGCharacterSheet(tk.Tk):
         self.setup_tab4(tab4)
         self.setup_tab5(tab5)
         self.setup_tab6(tab6)
+        self.setup_menu()
 
 # ---------------PAGE1------------------
     def setup_tab1(self, parent):
-        # Nagłówek - Dane podstawowe
+        self.tab1_entries = {}
+        self.derived_attr_vars = {}
+
         header_frame = ttk.LabelFrame(parent, text="Character Sheet")
         header_frame.pack(fill="x", padx=10, pady=5)
 
-        # Wiersz 1: Name, Race, Birthsign, Elite Advances
         row1_fields = [
             ("Name:", 35),
             ("Race:", 35),
@@ -76,10 +77,12 @@ class UESRPGCharacterSheet(tk.Tk):
         ]
 
         for i, (field_label, width_val) in enumerate(row1_fields):
+            key = field_label.rstrip(":")
             ttk.Label(header_frame, text=field_label).grid(row=0, column=i * 2, padx=5, pady=5, sticky="e")
-            ttk.Entry(header_frame, width=width_val).grid(row=0, column=i * 2 + 1, padx=5, pady=5, sticky="w")
+            entry = ttk.Entry(header_frame, width=width_val)
+            entry.grid(row=0, column=i * 2 + 1, padx=5, pady=5, sticky="w")
+            self.tab1_entries[key] = entry
 
-        # Wiersz 2: Size, XP, Total XP
         row2_fields = [
             ("Size:", 20),
             ("XP:", 20),
@@ -87,8 +90,11 @@ class UESRPGCharacterSheet(tk.Tk):
         ]
 
         for i, (field_label, width_val) in enumerate(row2_fields):
+            key = field_label.rstrip(":")
             ttk.Label(header_frame, text=field_label).grid(row=1, column=i * 2, padx=5, pady=5, sticky="e")
-            ttk.Entry(header_frame, width=width_val).grid(row=1, column=i * 2 + 1, padx=5, pady=5, sticky="w")
+            entry = ttk.Entry(header_frame, width=width_val)
+            entry.grid(row=1, column=i * 2 + 1, padx=5, pady=5, sticky="w")
+            self.tab1_entries[key] = entry
 
         # Characteristics
         attr_frame = ttk.LabelFrame(parent, text="Characteristics")
@@ -101,21 +107,19 @@ class UESRPGCharacterSheet(tk.Tk):
         self.bonus_vars = {}
         self.favored_vars = {}
 
-        # Etykieta "Favored" po lewej stronie wiersza
+        # Favored
         ttk.Label(attr_frame, text="Favored", font=('Helvetica', 9, 'bold')).grid(row=2, column=0, padx=(10, 5), pady=2,
                                                                                   sticky="e")
 
         for i, (attr, bonus_name) in enumerate(zip(attributes, bonus_names), start=1):
-            # 1. Etykieta atrybutu (Góra: Str, End, ...)
             ttk.Label(attr_frame, text=attr, font=('Helvetica', 9, 'bold')).grid(row=0, column=i, padx=12, pady=2)
 
-            # 2. Wartość atrybutu (Wpisywana liczba)
             var = tk.StringVar(value="0")
             self.attr_vars[attr] = var
             entry = ttk.Entry(attr_frame, textvariable=var, width=5, justify="center")
             entry.grid(row=1, column=i, padx=5, pady=2)
 
-            # 3. Checkbutton (Favored) - z wyjątkiem 'Lck'
+            # Checkbutton (Favored)
             if attr != "Lck":
                 cb_var = tk.BooleanVar(value=False)
                 self.favored_vars[attr] = cb_var
@@ -123,124 +127,88 @@ class UESRPGCharacterSheet(tk.Tk):
                 cb = ttk.Checkbutton(
                     attr_frame,
                     variable=cb_var,
-                    command=lambda a=attr: self.on_favored_toggle(a)
+                    command=lambda a=attr: self.on_favored_toggle(a) if hasattr(self, "on_favored_toggle") else None
                 )
                 cb.grid(row=2, column=i, padx=5, pady=2)
             else:
-                # Działka bez checkboxa dla Lck
                 ttk.Label(attr_frame, text="-").grid(row=2, column=i, padx=5, pady=2)
 
-            # 4. Wyliczony bonus (Wyświetlany pod spodem)
             b_var = tk.StringVar(value="0")
             self.bonus_vars[bonus_name] = b_var
             bonus_entry = ttk.Entry(attr_frame, textvariable=b_var, width=5, justify="center", state="readonly")
             bonus_entry.grid(row=3, column=i, padx=5, pady=2)
 
-            # 5. Etykieta bonusu (Dół: SB, EB, ...)
             ttk.Label(attr_frame, text=bonus_name, foreground="gray").grid(row=4, column=i, padx=12, pady=2)
 
-            # Automatyczne liczenie bonusu
             var.trace_add("write", lambda *args, a=attr, b=bonus_name: self.calculate_bonus(a, b))
 
         lucky_frame = ttk.Frame(attr_frame)
         lucky_frame.grid(row=5, column=0, columnspan=9, pady=(10, 5), sticky="w", padx=10)
 
         for i, field in enumerate(["Lucky Numbers:", "Unlucky Numbers:"]):
+            key = field.rstrip(":")
             ttk.Label(lucky_frame, text=field, font=('Helvetica', 9, 'bold')).grid(row=0, column=i * 2, padx=(10, 5),
                                                                                    pady=5, sticky="e")
-            ttk.Entry(lucky_frame, width=25).grid(row=0, column=i * 2 + 1, padx=(0, 15), pady=5, sticky="w")
+            entry = ttk.Entry(lucky_frame, width=25)
+            entry.grid(row=0, column=i * 2 + 1, padx=(0, 15), pady=5, sticky="w")
+            self.tab1_entries[key] = entry
 
-        # Sekcja Attributes (dwa słupki według wzoru ze zdjęcia)
+        # Attributes
         attributes_frame = ttk.LabelFrame(parent, text="Attributes")
         attributes_frame.pack(fill="x", padx=10, pady=5)
 
-        # Lewa kolumna: HP, WT, Speed, IR, Linguistics
-        # HP (Current / Max)
-        ttk.Label(attributes_frame, text="HP", font=('Helvetica', 9, 'bold')).grid(row=0, column=0, padx=5, pady=2,
-                                                                                   sticky="e")
-        hp_frame = ttk.Frame(attributes_frame)
-        hp_frame.grid(row=0, column=1, padx=5, pady=2, sticky="w")
-        ttk.Entry(hp_frame, width=5, justify="center").pack(side="left")
-        ttk.Label(hp_frame, text="/").pack(side="left", padx=2)
-        ttk.Entry(hp_frame, width=5, justify="center").pack(side="left")
+        # Current / Max
+        def create_dual_entry(parent_widget, row, col, label_text):
+            ttk.Label(parent_widget, text=label_text, font=('Helvetica', 9, 'bold')).grid(row=row, column=col,
+                                                                                          padx=(20 if col > 0 else 5,
+                                                                                                5), pady=2, sticky="e")
+            frame = ttk.Frame(parent_widget)
+            frame.grid(row=row, column=col + 1, padx=5, pady=2, sticky="w")
+            e1 = ttk.Entry(frame, width=5, justify="center")
+            e1.pack(side="left")
+            ttk.Label(frame, text="/").pack(side="left", padx=2)
+            e2 = ttk.Entry(frame, width=5, justify="center")
+            e2.pack(side="left")
+            return (e1, e2)
 
-        # WT
-        ttk.Label(attributes_frame, text="WT", font=('Helvetica', 9, 'bold')).grid(row=1, column=0, padx=5, pady=2,
-                                                                                   sticky="e")
-        ttk.Entry(attributes_frame, width=13, justify="center").grid(row=1, column=1, padx=5, pady=2, sticky="w")
+        def create_single_entry(parent_widget, row, col, label_text, width=13):
+            ttk.Label(parent_widget, text=label_text, font=('Helvetica', 9, 'bold')).grid(row=row, column=col,
+                                                                                          padx=(20 if col > 0 else 5,
+                                                                                                5), pady=2, sticky="e")
+            e = ttk.Entry(parent_widget, width=width, justify="center" if width < 20 else "left")
+            e.grid(row=row, column=col + 1, padx=5, pady=2, sticky="w")
+            return e
 
-        # Speed (Base / Armor Mod)
-        ttk.Label(attributes_frame, text="Speed", font=('Helvetica', 9, 'bold')).grid(row=2, column=0, padx=5, pady=2,
-                                                                                   sticky="e")
-        ttk.Entry(attributes_frame, width=13, justify="center").grid(row=2, column=1, padx=5, pady=2, sticky="w")
+        # HP, WT, Speed, IR, Linguistics
+        self.derived_attr_vars["HP"] = create_dual_entry(attributes_frame, 0, 0, "HP")
+        self.derived_attr_vars["WT"] = create_single_entry(attributes_frame, 1, 0, "WT")
+        self.derived_attr_vars["Speed"] = create_single_entry(attributes_frame, 2, 0, "Speed")
+        self.derived_attr_vars["IR"] = create_single_entry(attributes_frame, 3, 0, "IR")
 
-        # IR
-        ttk.Label(attributes_frame, text="IR", font=('Helvetica', 9, 'bold')).grid(row=3, column=0, padx=5, pady=2,
-                                                                                   sticky="e")
-        ttk.Entry(attributes_frame, width=13, justify="center").grid(row=3, column=1, padx=5, pady=2, sticky="w")
-
-        # Linguistics
+        ling_entry = ttk.Entry(attributes_frame, width=25)
         ttk.Label(attributes_frame, text="Linguistics", font=('Helvetica', 9, 'bold')).grid(row=4, column=0, padx=5,
                                                                                             pady=2, sticky="e")
-        ttk.Entry(attributes_frame, width=25).grid(row=4, column=1, padx=5, pady=2, sticky="w")
+        ling_entry.grid(row=4, column=1, padx=5, pady=2, sticky="w")
+        self.tab1_entries["Linguistics"] = ling_entry
 
-        # Prawa kolumna: MP, SP, LP, AP, ENC / CR
-        # MP (Current / Max)
-        ttk.Label(attributes_frame, text="MP", font=('Helvetica', 9, 'bold')).grid(row=0, column=2, padx=(20, 5),
-                                                                                   pady=2, sticky="e")
-        mp_frame = ttk.Frame(attributes_frame)
-        mp_frame.grid(row=0, column=3, padx=5, pady=2, sticky="w")
-        ttk.Entry(mp_frame, width=5, justify="center").pack(side="left")
-        ttk.Label(mp_frame, text="/").pack(side="left", padx=2)
-        ttk.Entry(mp_frame, width=5, justify="center").pack(side="left")
+        # MP, SP, LP, AP, ENC / CR
+        self.derived_attr_vars["MP"] = create_dual_entry(attributes_frame, 0, 2, "MP")
+        self.derived_attr_vars["SP"] = create_dual_entry(attributes_frame, 1, 2, "SP")
+        self.derived_attr_vars["LP"] = create_dual_entry(attributes_frame, 2, 2, "LP")
+        self.derived_attr_vars["AP"] = create_dual_entry(attributes_frame, 3, 2, "AP")
+        self.derived_attr_vars["ENC / CR"] = create_dual_entry(attributes_frame, 4, 2, "ENC / CR")
 
-        # SP (Current / Max)
-        ttk.Label(attributes_frame, text="SP", font=('Helvetica', 9, 'bold')).grid(row=1, column=2, padx=(20, 5),
-                                                                                   pady=2, sticky="e")
-        sp_frame = ttk.Frame(attributes_frame)
-        sp_frame.grid(row=1, column=3, padx=5, pady=2, sticky="w")
-        ttk.Entry(sp_frame, width=5, justify="center").pack(side="left")
-        ttk.Label(sp_frame, text="/").pack(side="left", padx=2)
-        ttk.Entry(sp_frame, width=5, justify="center").pack(side="left")
-
-        # LP (Current / Max)
-        ttk.Label(attributes_frame, text="LP", font=('Helvetica', 9, 'bold')).grid(row=2, column=2, padx=(20, 5),
-                                                                                   pady=2, sticky="e")
-        lp_frame = ttk.Frame(attributes_frame)
-        lp_frame.grid(row=2, column=3, padx=5, pady=2, sticky="w")
-        ttk.Entry(lp_frame, width=5, justify="center").pack(side="left")
-        ttk.Label(lp_frame, text="/").pack(side="left", padx=2)
-        ttk.Entry(lp_frame, width=5, justify="center").pack(side="left")
-
-        # AP (Current / Max)
-        ttk.Label(attributes_frame, text="AP", font=('Helvetica', 9, 'bold')).grid(row=3, column=2, padx=(20, 5),
-                                                                                   pady=2, sticky="e")
-        ap_frame = ttk.Frame(attributes_frame)
-        ap_frame.grid(row=3, column=3, padx=5, pady=2, sticky="w")
-        ttk.Entry(ap_frame, width=5, justify="center").pack(side="left")
-        ttk.Label(ap_frame, text="/").pack(side="left", padx=2)
-        ttk.Entry(ap_frame, width=5, justify="center").pack(side="left")
-
-        # ENC / CR
-        ttk.Label(attributes_frame, text="ENC / CR", font=('Helvetica', 9, 'bold')).grid(row=4, column=2,
-                                                                                         padx=(20, 5), pady=2,
-                                                                                         sticky="e")
-        enc_frame = ttk.Frame(attributes_frame)
-        enc_frame.grid(row=4, column=3, padx=5, pady=2, sticky="w")
-        ttk.Entry(enc_frame, width=5, justify="center").pack(side="left")
-        ttk.Label(enc_frame, text="/").pack(side="left", padx=2)
-        ttk.Entry(enc_frame, width=5, justify="center").pack(side="left")
-
-        # Dół: Languages (roziągnięte pod obiema kolumnami)
+        #Languages
         ttk.Label(attributes_frame, text="Languages", font=('Helvetica', 9, 'bold')).grid(row=5, column=0, padx=5,
                                                                                           pady=(5, 10), sticky="e")
-        ttk.Entry(attributes_frame, width=65).grid(row=5, column=1, columnspan=3, padx=5, pady=(5, 10), sticky="w")
+        langs_entry = ttk.Entry(attributes_frame, width=65)
+        langs_entry.grid(row=5, column=1, columnspan=3, padx=5, pady=(5, 10), sticky="w")
+        self.tab1_entries["Languages"] = langs_entry
 
-        # --- SEKCJA BONDS ---
+        #BONDS
         bonds_frame = ttk.LabelFrame(parent, text="Bonds")
         bonds_frame.pack(fill="both", expand=True, padx=10, pady=5)
 
-        # Pole tekstowe do wpisywania więzi z paskiem przewijania
         self.bonds_text = tk.Text(bonds_frame, height=5, wrap="word")
         bonds_scrollbar = ttk.Scrollbar(bonds_frame, orient="vertical", command=self.bonds_text.yview)
         self.bonds_text.configure(yscrollcommand=bonds_scrollbar.set)
@@ -248,18 +216,21 @@ class UESRPGCharacterSheet(tk.Tk):
         self.bonds_text.pack(side="left", fill="both", expand=True, padx=(5, 0), pady=5)
         bonds_scrollbar.pack(side="right", fill="y", padx=(0, 5), pady=5)
 
-    def calculate_bonus(self, attr_name, bonus_name):
-        raw_val = self.attr_vars[attr_name].get()
-        try:
-            val = int(raw_val)
-            bonus = val // 10
-        except ValueError:
-            bonus = 0
+    def on_favored_toggle(self, changed_attr):
+        favored_count = sum(1 for var in self.favored_vars.values() if var.get())
 
-        self.bonus_vars[bonus_name].set(str(bonus))
+        if favored_count > 2:
+            self.favored_vars[changed_attr].set(False)
+
+            messagebox.showwarning(
+                "Limit Favored",
+                "Max 2 Favored Attributes!"
+            )
+        else:
+            if hasattr(self, "calculate_derived"):
+                self.calculate_derived()
 #---------------PAGE2------------------
     def setup_tab2(self, parent):
-        # Definicja rang i odpowiadających im wartości (Rank, Bonus)
         self.skill_ranks_info = {
             "Untrained": (-1, -20),
             "Novice": (0, 0),
@@ -270,7 +241,6 @@ class UESRPGCharacterSheet(tk.Tk):
             "Master": (5, 50)
         }
 
-        # 1. FUNKCJE POMOCNICZE (Lokalne, zapobiegają błędom AttributeError)
         def update_skill_values(skill_name):
             data = self.skill_vars[skill_name]
             selected_level = data["level_cb"].get()
@@ -331,7 +301,6 @@ class UESRPGCharacterSheet(tk.Tk):
             self.cs_tn_str_var.set(str(str_val + bonus))
             self.cs_tn_ag_var.set(str(ag_val + bonus))
 
-        # Przypisanie funkcji przeliczania do klasy, aby Tab1 mógł ją wywoływać
         def recalculate_all_tns():
             if hasattr(self, 'skill_vars'):
                 for skill_name in self.skill_vars:
@@ -344,7 +313,7 @@ class UESRPGCharacterSheet(tk.Tk):
 
         self.recalculate_all_tns = recalculate_all_tns
 
-        # 2. KONTENER ZE SCROLLBAREM (Canvas + Scrollbar)
+        #Canvas + Scrollbar
         canvas = tk.Canvas(parent, highlightthickness=0)
         scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
 
@@ -361,7 +330,6 @@ class UESRPGCharacterSheet(tk.Tk):
             canvas.itemconfig(canvas_window, width=event.width)
 
         canvas.bind('<Configure>', _on_canvas_configure)
-
         canvas.configure(yscrollcommand=scrollbar.set)
 
         def _on_mousewheel(event):
@@ -372,14 +340,12 @@ class UESRPGCharacterSheet(tk.Tk):
         scrollbar.pack(side="right", fill="y")
         canvas.pack(side="left", fill="both", expand=True)
 
-        # 3. PODZIAŁ EKRANU (Skills | Professions, CS, Spec)
         skills_frame = ttk.LabelFrame(main_container, text="Skills")
         skills_frame.pack(side="left", fill="both", expand=True, padx=(10, 5), pady=5)
 
         right_container = ttk.Frame(main_container)
         right_container.pack(side="right", fill="both", expand=True, padx=(5, 10), pady=5)
 
-        # --- LEWA STRONA: STANDARD SKILLS ---
         skills_data = [
             ("Acrobatics", ["Str", "Ag"]),
             ("Alchemy", ["Int"]),
@@ -414,7 +380,8 @@ class UESRPGCharacterSheet(tk.Tk):
             ttk.Label(skills_frame, text=f"{skill_name}{stats_str}").grid(row=row_idx, column=0, padx=5, pady=2,
                                                                           sticky="w")
 
-            level_cb = ttk.Combobox(skills_frame, values=list(self.skill_ranks_info.keys()), state="readonly", width=10)
+            level_cb = ttk.Combobox(skills_frame, values=list(self.skill_ranks_info.keys()), state="readonly",
+                                    width=10)
             level_cb.set("Untrained")
             level_cb.grid(row=row_idx, column=1, padx=2, pady=2)
 
@@ -450,20 +417,23 @@ class UESRPGCharacterSheet(tk.Tk):
             level_cb.bind("<<ComboboxSelected>>", lambda event, s=skill_name: update_skill_values(s))
             update_skill_values(skill_name)
 
-        # --- PRAWA STRONA: PROFESSIONS ---
+        # --- PROFESSIONS ---
         prof_frame = ttk.LabelFrame(right_container, text="Professions / Custom Skills")
         prof_frame.pack(fill="x", padx=0, pady=(0, 5))
 
         prof_headers_frame = ttk.Frame(prof_frame)
         prof_headers_frame.pack(fill="x", padx=2, pady=(5, 2))
 
-        ttk.Label(prof_headers_frame, text="Custom Skill / Profession", font=('Helvetica', 9, 'bold'), width=22).pack(
+        ttk.Label(prof_headers_frame, text="Custom Skill / Profession", font=('Helvetica', 9, 'bold'),
+                  width=22).pack(
             side="left", padx=2)
-        ttk.Label(prof_headers_frame, text="Level", font=('Helvetica', 9, 'bold'), width=12).pack(side="left", padx=2)
+        ttk.Label(prof_headers_frame, text="Level", font=('Helvetica', 9, 'bold'), width=12).pack(side="left",
+                                                                                                  padx=2)
         ttk.Label(prof_headers_frame, text="Attributes", font=('Helvetica', 9, 'bold'), width=18).pack(side="left",
                                                                                                        padx=2)
         ttk.Label(prof_headers_frame, text="Rank", font=('Helvetica', 9, 'bold'), width=5).pack(side="left", padx=2)
-        ttk.Label(prof_headers_frame, text="Bonus", font=('Helvetica', 9, 'bold'), width=6).pack(side="left", padx=2)
+        ttk.Label(prof_headers_frame, text="Bonus", font=('Helvetica', 9, 'bold'), width=6).pack(side="left",
+                                                                                                 padx=2)
         ttk.Label(prof_headers_frame, text="TN", font=('Helvetica', 9, 'bold')).pack(side="left", padx=2)
 
         prof_rows_container = ttk.Frame(prof_frame)
@@ -498,8 +468,9 @@ class UESRPGCharacterSheet(tk.Tk):
 
             ttk.Entry(r_frame, textvariable=rank_var, width=4, justify="center", state="readonly").pack(side="left",
                                                                                                         padx=2)
-            ttk.Entry(r_frame, textvariable=bonus_var, width=5, justify="center", state="readonly").pack(side="left",
-                                                                                                         padx=2)
+            ttk.Entry(r_frame, textvariable=bonus_var, width=5, justify="center", state="readonly").pack(
+                side="left",
+                padx=2)
 
             tn_container = ttk.Frame(r_frame)
             tn_container.pack(side="left", padx=2)
@@ -533,13 +504,14 @@ class UESRPGCharacterSheet(tk.Tk):
             if row_data in self.prof_rows:
                 self.prof_rows.remove(row_data)
 
+        self.add_prof_row = add_prof_row
         for _ in range(3):
-            add_prof_row()
+            self.add_prof_row()
 
         add_prof_btn = ttk.Button(prof_frame, text="+ Add Profession", command=add_prof_row)
         add_prof_btn.pack(anchor="w", padx=5, pady=5)
 
-        # --- PRAWA STRONA: COMBAT STYLE (Str, Ag) ---
+        # --- COMBAT STYLE (Str, Ag) ---
         cs_frame = ttk.LabelFrame(right_container, text="Combat Style (Str, Ag)")
         cs_frame.pack(fill="x", padx=0, pady=5)
 
@@ -551,20 +523,23 @@ class UESRPGCharacterSheet(tk.Tk):
         self.cs_name_entry.pack(side="left", padx=(0, 10))
 
         ttk.Label(cs_top, text="Level:").pack(side="left", padx=(0, 5))
-        self.cs_level_cb = ttk.Combobox(cs_top, values=list(self.skill_ranks_info.keys()), state="readonly", width=10)
+        self.cs_level_cb = ttk.Combobox(cs_top, values=list(self.skill_ranks_info.keys()), state="readonly",
+                                        width=10)
         self.cs_level_cb.set("Untrained")
         self.cs_level_cb.pack(side="left", padx=(0, 10))
 
         ttk.Label(cs_top, text="Rank:").pack(side="left", padx=(0, 2))
         self.cs_rank_var = tk.StringVar(value="-1")
-        ttk.Entry(cs_top, textvariable=self.cs_rank_var, width=4, justify="center", state="readonly").pack(side="left",
-                                                                                                           padx=(0, 10))
+        ttk.Entry(cs_top, textvariable=self.cs_rank_var, width=4, justify="center", state="readonly").pack(
+            side="left",
+            padx=(0, 10))
 
         ttk.Label(cs_top, text="Bonus:").pack(side="left", padx=(0, 2))
         self.cs_bonus_var = tk.StringVar(value="-20")
-        ttk.Entry(cs_top, textvariable=self.cs_bonus_var, width=5, justify="center", state="readonly").pack(side="left",
-                                                                                                            padx=(0,
-                                                                                                                  10))
+        ttk.Entry(cs_top, textvariable=self.cs_bonus_var, width=5, justify="center", state="readonly").pack(
+            side="left",
+            padx=(0,
+                  10))
 
         ttk.Label(cs_top, text="TN:").pack(side="left", padx=(0, 2))
         self.cs_tn_str_var = tk.StringVar(value="0")
@@ -572,7 +547,8 @@ class UESRPGCharacterSheet(tk.Tk):
         ttk.Entry(cs_top, textvariable=self.cs_tn_str_var, width=4, justify="center", state="readonly").pack(
             side="left")
         ttk.Label(cs_top, text=",").pack(side="left", padx=1)
-        ttk.Entry(cs_top, textvariable=self.cs_tn_ag_var, width=4, justify="center", state="readonly").pack(side="left")
+        ttk.Entry(cs_top, textvariable=self.cs_tn_ag_var, width=4, justify="center", state="readonly").pack(
+            side="left")
 
         ttk.Label(cs_frame, text="Weapons / Armor:", font=('Helvetica', 9, 'bold')).pack(anchor="w", padx=5,
                                                                                          pady=(5, 2))
@@ -601,8 +577,9 @@ class UESRPGCharacterSheet(tk.Tk):
             if row_data in self.cs_lines:
                 self.cs_lines.remove(row_data)
 
+        self.add_cs_line_row = add_cs_line_row
         for _ in range(5):
-            add_cs_line_row()
+            self.add_cs_line_row = add_cs_line_row
 
         add_cs_line_btn = ttk.Button(cs_frame, text="+ Add Weapon / Armor", command=add_cs_line_row)
         add_cs_line_btn.pack(anchor="w", padx=5, pady=(0, 5))
@@ -610,7 +587,7 @@ class UESRPGCharacterSheet(tk.Tk):
         self.cs_level_cb.bind("<<ComboboxSelected>>", lambda event: update_cs_values())
         update_cs_values()
 
-        # --- PRAWA STRONA: SPECIALIZATIONS ---
+        # --- SPECIALIZATIONS ---
         spec_frame = ttk.LabelFrame(right_container, text="Specializations")
         spec_frame.pack(fill="both", expand=True, padx=0, pady=(5, 0))
 
@@ -638,14 +615,14 @@ class UESRPGCharacterSheet(tk.Tk):
             if row_data in self.spec_lines:
                 self.spec_lines.remove(row_data)
 
+        self.add_spec_line_row = add_spec_line_row
         for _ in range(2):
-            add_spec_line_row()
+            self.add_spec_line_row = add_spec_line_row
 
         add_spec_btn = ttk.Button(spec_frame, text="+ Add Specialization", command=add_spec_line_row)
         add_spec_btn.pack(anchor="w", padx=5, pady=(0, 5))
 #---------------PAGE3------------------
     def setup_tab3(self, parent):
-        # 1. KONTENER ZE SCROLLBAREM (Canvas + Scrollbar)
         canvas = tk.Canvas(parent, highlightthickness=0)
         scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
 
@@ -673,16 +650,13 @@ class UESRPGCharacterSheet(tk.Tk):
         scrollbar.pack(side="right", fill="y")
         canvas.pack(side="left", fill="both", expand=True)
 
-        # Podział ekranu na stronę lewą i prawą
         left_side = ttk.Frame(main_container)
         left_side.pack(side="left", fill="both", expand=True, padx=(10, 5), pady=5)
 
         right_side = ttk.Frame(main_container)
         right_side.pack(side="right", fill="both", expand=True, padx=(5, 10), pady=5)
 
-        # ==========================================
-        # LEWA STRONA: ARMOR, SHIELD, NOTES
-        # ==========================================
+        # ARMOR, SHIELD, NOTES
         armor_frame = ttk.LabelFrame(left_side, text="Armor")
         armor_frame.pack(fill="x", padx=0, pady=(0, 5))
 
@@ -704,7 +678,6 @@ class UESRPGCharacterSheet(tk.Tk):
 
         self.armor_vars = {}
 
-        # 1. Lewa strefa pancerza
         left_arm_container = ttk.Frame(armor_frame)
         left_arm_container.grid(row=0, column=0, padx=5, pady=5, sticky="n")
 
@@ -730,7 +703,6 @@ class UESRPGCharacterSheet(tk.Tk):
             ttk.Entry(z_frame, textvariable=self.armor_vars[zone_key]["type"], width=8).grid(row=2, column=1, padx=2,
                                                                                              pady=1)
 
-        # 2. Środek (Placeholder graficzny)
         center_arm_container = ttk.Frame(armor_frame)
         center_arm_container.grid(row=0, column=1, padx=5, pady=5, sticky="nsew")
 
@@ -739,7 +711,6 @@ class UESRPGCharacterSheet(tk.Tk):
         body_canvas.pack(expand=True)
         body_canvas.create_text(60, 120, text="[ Character ]", fill="#888888", justify="center")
 
-        # 3. Prawa strefa pancerza
         right_arm_container = ttk.Frame(armor_frame)
         right_arm_container.grid(row=0, column=2, padx=5, pady=5, sticky="n")
 
@@ -774,7 +745,6 @@ class UESRPGCharacterSheet(tk.Tk):
         self.shield_var = tk.StringVar()
         ttk.Entry(shield_frame, textvariable=self.shield_var).pack(side="left", fill="x", expand=True)
 
-        # Sekcje tekstowe
         notes_frame = ttk.LabelFrame(left_side, text="Armor Notes")
         notes_frame.pack(fill="x", pady=2)
         self.armor_notes_text = tk.Text(notes_frame, height=4, wrap="word")
@@ -790,9 +760,7 @@ class UESRPGCharacterSheet(tk.Tk):
         self.conditions_text = tk.Text(conditions_frame, height=4, wrap="word")
         self.conditions_text.pack(fill="both", expand=True, padx=2, pady=2)
 
-        # ==========================================
         # PRAWA STRONA: WEAPONS & AMMUNITION
-        # ==========================================
         dmg_options = ["1d4", "1d6", "1d8", "1d10", "1d12", "2d8", "2d10", "2d12"]
         bonus_mat_options = [f"+{i}" for i in range(0, 11)]
         h_options = ["1H", "2H"]
@@ -816,7 +784,6 @@ class UESRPGCharacterSheet(tk.Tk):
                         ttk.Label(headers_frame, text=text, font=('Helvetica', 8, 'bold')).pack(side="left", fill="x", expand=True, padx=2)
                     else:
                         ttk.Label(headers_frame, text=text, font=('Helvetica', 8, 'bold'), width=w).pack(side="left", padx=2)
-                # Pusta etykieta do wyrównania nagłówka z przyciskiem usuwania
                 ttk.Label(headers_frame, text="", width=3).pack(side="right")
 
                 def add_melee_row():
@@ -885,6 +852,7 @@ class UESRPGCharacterSheet(tk.Tk):
                     }
 
                     self.weapons_vars["melee"].append(item_data)
+                    self.add_melee_row = add_melee_row
 
                 def remove_row(item_data):
                     item_data["frame"].destroy()
@@ -967,6 +935,7 @@ class UESRPGCharacterSheet(tk.Tk):
                     }
 
                     self.weapons_vars["ranged"].append(item_data)
+                    self.add_ranged_row = add_ranged_row
 
                 def remove_row(item_data):
                     item_data["frame"].destroy()
@@ -1020,6 +989,7 @@ class UESRPGCharacterSheet(tk.Tk):
                     }
 
                     self.weapons_vars["ammo"].append(item_data)
+                    self.add_ammo_row = add_ammo_row
 
                 def remove_row(item_data):
                     item_data["frame"].destroy()
@@ -1032,14 +1002,13 @@ class UESRPGCharacterSheet(tk.Tk):
                 btn = ttk.Button(frame, text="+ Add Ammunition", command=add_ammo_row)
                 btn.pack(anchor="w", padx=5, pady=5)
 
-        # Wywołanie budujące wszystkie 3 dynamiczne sekcje
         build_dynamic_weapon_table(right_side, "Melee Weapons", "melee")
         build_dynamic_weapon_table(right_side, "Ranged Weapons", "ranged")
         build_dynamic_weapon_table(right_side, "Ammunition", "ammo")
 
 # ---------------PAGE4------------------
     def setup_tab4(self, parent):
-        # Główny kontener strony 4: Items & Equipment
+        #Items & Equipment
         main_container = ttk.Frame(parent)
         main_container.pack(fill="both", expand=True, padx=10, pady=5)
 
@@ -1050,11 +1019,12 @@ class UESRPGCharacterSheet(tk.Tk):
         eq_frame.columnconfigure(1, weight=1)
 
         self.equipment_vars = []
+        self.equipment_rows = []  # Przechowuje pełne obiekty wierszy do zapisu/odczytu
 
-        # 1. LEWA STRONA: Items & Equipment (14 wierszy)
+        #Items & Equipment
         left_eq_frame = ttk.Frame(eq_frame)
         left_eq_frame.grid(row=0, column=0, padx=10, pady=5, sticky="nsew")
-        left_eq_frame.columnconfigure(1, weight=1)  # Nazwa przedmiotu rozciąga się w poziomie
+        left_eq_frame.columnconfigure(1, weight=1)
 
         ttk.Label(left_eq_frame, text="Qty", font=('Helvetica', 9, 'bold')).grid(row=0, column=0, padx=2, pady=2)
         ttk.Label(left_eq_frame, text="Items & Equipment", font=('Helvetica', 9, 'bold')).grid(row=0, column=1, padx=2,
@@ -1072,10 +1042,14 @@ class UESRPGCharacterSheet(tk.Tk):
             enc_entry = ttk.Entry(left_eq_frame, textvariable=enc_var, width=6, justify="center")
             enc_entry.grid(row=i, column=2, padx=2, pady=1)
 
-            enc_var.trace_add("write", lambda *args: self.calculate_total_enc())
+            enc_var.trace_add("write", self.calculate_total_enc)
             self.equipment_vars.append(enc_var)
+            self.equipment_rows.append({
+                "qty": qty_entry,
+                "item": item_entry,
+                "enc_var": enc_var
+            })
 
-        # 2. PRAWA STRONA: Items & Equipment (Cont.) (12 wierszy + podsumowanie)
         right_eq_frame = ttk.Frame(eq_frame)
         right_eq_frame.grid(row=0, column=1, padx=10, pady=5, sticky="nsew")
         right_eq_frame.columnconfigure(1, weight=1)
@@ -1097,10 +1071,15 @@ class UESRPGCharacterSheet(tk.Tk):
             enc_entry = ttk.Entry(right_eq_frame, textvariable=enc_var, width=6, justify="center")
             enc_entry.grid(row=i, column=2, padx=2, pady=1)
 
-            enc_var.trace_add("write", self.calculate_total_enc)
+            enc_var.trace_add("write", lambda *args: self.calculate_total_enc())
             self.equipment_vars.append(enc_var)
+            self.equipment_rows.append({
+                "qty": qty_entry,
+                "item": item_entry,
+                "enc_var": enc_var
+            })
 
-        # 3. PODSUMOWANIE (Total ENC & Drakes)
+        # 3. Total ENC & Drakes
         summary_frame = ttk.Frame(right_eq_frame)
         summary_frame.grid(row=13, column=0, columnspan=3, padx=2, pady=(15, 5), sticky="e")
 
@@ -1117,20 +1096,21 @@ class UESRPGCharacterSheet(tk.Tk):
                                                                                                 pady=2)
 
     def calculate_total_enc(self, *args):
-        """Dynamicznie sumuje punkty obciążenia ze wszystkich pól ekwipunku."""
         total = 0.0
-        for enc_var in self.equipment_vars:
-            val_str = enc_var.get().strip().replace(',', '.')
-            if val_str:
-                try:
-                    total += float(val_str)
-                except ValueError:
-                    pass
+        if hasattr(self, "equipment_vars"):
+            for enc_var in self.equipment_vars:
+                val_str = enc_var.get().strip().replace(',', '.')
+                if val_str:
+                    try:
+                        total += float(val_str)
+                    except ValueError:
+                        pass
 
-        if total.is_integer():
-            self.total_enc_var.set(str(int(total)))
-        else:
-            self.total_enc_var.set(f"{total:.1f}")
+        if hasattr(self, "total_enc_var"):
+            if total.is_integer():
+                self.total_enc_var.set(str(int(total)))
+            else:
+                self.total_enc_var.set(f"{total:.1f}")
 # ---------------PAGE5------------------
     def setup_tab5(self, parent):
         main_canvas = tk.Canvas(parent, highlightthickness=0)
@@ -1153,6 +1133,7 @@ class UESRPGCharacterSheet(tk.Tk):
             "traits": [],
             "powers": []
         }
+        self.ttp_containers = {}
 
         self._build_collapsible_section(scrollable_frame, "Talents", "talents")
         self._build_collapsible_section(scrollable_frame, "Traits", "traits")
@@ -1173,6 +1154,8 @@ class UESRPGCharacterSheet(tk.Tk):
 
         rows_container = ttk.Frame(container)
         rows_container.pack(fill="x", expand=True)
+
+        self.ttp_containers[category_key] = rows_container
 
         add_btn = ttk.Button(
             container,
@@ -1213,10 +1196,15 @@ class UESRPGCharacterSheet(tk.Tk):
     def _remove_ttp_row(self, category_key, row_data):
         row_data["frame"].destroy()
         self.ttp_data[category_key].remove(row_data)
+
+    def _add_ttp_row_with_data(self, category_key, name_text="", effect_text=""):
+        if category_key in self.ttp_containers:
+            container = self.ttp_containers[category_key]
+            self._add_ttp_row(container, category_key)
+            last_row = self.ttp_data[category_key][-1]
+            last_row["name"].insert(0, str(name_text))
+            last_row["effect"].insert(0, str(effect_text))
 # ---------------PAGE6------------------
-# ==========================================
-    # STRONA 6: SPELLCASTING, RITUALS & SPELLS
-    # ==========================================
     def setup_tab6(self, parent):
         main_canvas = tk.Canvas(parent, highlightthickness=0)
         scrollbar = ttk.Scrollbar(parent, orient="vertical", command=main_canvas.yview)
@@ -1248,9 +1236,7 @@ class UESRPGCharacterSheet(tk.Tk):
         self.rituals_vars = []
         self.spells_vars = []
 
-        # ==========================================
         # 1. SPELLCASTING SKILLS
-        # ==========================================
         spell_frame = ttk.LabelFrame(left_side, text="Spellcasting Skills")
         spell_frame.pack(fill="x", pady=(0, 10))
 
@@ -1274,7 +1260,7 @@ class UESRPGCharacterSheet(tk.Tk):
         for label_text, school_key, main_attr in magic_schools:
             ttk.Label(spell_frame, text=label_text).grid(row=current_row, column=0, padx=5, pady=2, sticky="w")
 
-            level_cb = ttk.Combobox(spell_frame, values=list(self.skill_ranks_info.keys()), state="readonly", width=10)
+            level_cb = ttk.Combobox(spell_frame, values=list(getattr(self, 'skill_ranks_info', {}).keys()), state="readonly", width=10)
             level_cb.set("Untrained")
             level_cb.grid(row=current_row, column=1, padx=2, pady=2)
 
@@ -1301,7 +1287,7 @@ class UESRPGCharacterSheet(tk.Tk):
             self.update_magic_skill_values(school_key)
             current_row += 1
 
-        # Sekcja: Custom Magic Skills
+        # Custom Magic Skills
         ttk.Separator(spell_frame, orient="horizontal").grid(row=current_row, column=0, columnspan=5, sticky="ew", pady=5)
         current_row += 1
 
@@ -1322,7 +1308,7 @@ class UESRPGCharacterSheet(tk.Tk):
             attr_cb.set("Wp")
             attr_cb.pack(side="left", padx=2)
 
-            level_cb = ttk.Combobox(r_frame, values=list(self.skill_ranks_info.keys()), state="readonly", width=10)
+            level_cb = ttk.Combobox(r_frame, values=list(getattr(self, 'skill_ranks_info', {}).keys()), state="readonly", width=10)
             level_cb.set("Untrained")
             level_cb.pack(side="left", padx=2)
 
@@ -1346,7 +1332,7 @@ class UESRPGCharacterSheet(tk.Tk):
 
             def update_custom_row():
                 lvl = level_cb.get()
-                rank, bonus = self.skill_ranks_info.get(lvl, (-1, -20))
+                rank, bonus = getattr(self, 'skill_ranks_info', {}).get(lvl, (-1, -20))
                 rank_var.set(str(rank))
                 bonus_var.set(f"+{bonus}" if bonus >= 0 else str(bonus))
 
@@ -1369,17 +1355,16 @@ class UESRPGCharacterSheet(tk.Tk):
 
         def remove_custom_skill(row_data):
             row_data["frame"].destroy()
-            self.custom_magic_skills.remove(row_data)
+            if row_data in self.custom_magic_skills:
+                self.custom_magic_skills.remove(row_data)
 
-        for _ in range(1):
-            add_custom_skill_row()
+        self.add_custom_skill_row = add_custom_skill_row
+        self.add_custom_skill_row()
 
-        add_skill_btn = ttk.Button(spell_frame, text="+ Add Custom Skill", command=add_custom_skill_row)
+        add_skill_btn = ttk.Button(spell_frame, text="+ Add Custom Skill", command=self.add_custom_skill_row)
         add_skill_btn.grid(row=current_row + 1, column=0, columnspan=5, pady=5, padx=5, sticky="w")
 
-        # ==========================================
         # 2. SPECIALIZATIONS
-        # ==========================================
         spec_frame = ttk.LabelFrame(left_side, text="Specializations")
         spec_frame.pack(fill="x", pady=(5, 10))
 
@@ -1402,17 +1387,16 @@ class UESRPGCharacterSheet(tk.Tk):
 
         def remove_spec_row(row_data):
             row_data["frame"].destroy()
-            self.specializations_vars.remove(row_data)
+            if row_data in self.specializations_vars:
+                self.specializations_vars.remove(row_data)
 
-        for _ in range(1):
-            add_spec_row()
+        self.add_spec_row = add_spec_row
+        self.add_spec_row()
 
-        add_spec_btn = ttk.Button(spec_frame, text="+ Add Specialization", command=add_spec_row)
+        add_spec_btn = ttk.Button(spec_frame, text="+ Add Specialization", command=self.add_spec_row)
         add_spec_btn.pack(anchor="w", padx=5, pady=5)
 
-        # ==========================================
         # 3. RITUALS
-        # ==========================================
         rituals_frame = ttk.LabelFrame(left_side, text="Rituals")
         rituals_frame.pack(fill="x", pady=(0, 10))
 
@@ -1446,97 +1430,83 @@ class UESRPGCharacterSheet(tk.Tk):
 
         def remove_ritual_row(row_data):
             row_data["frame"].destroy()
-            self.rituals_vars.remove(row_data)
+            if row_data in self.rituals_vars:
+                self.rituals_vars.remove(row_data)
 
-        for _ in range(1):
-            add_ritual_row()
+        self.add_ritual_row = add_ritual_row
+        self.add_ritual_row()
 
-        add_ritual_btn = ttk.Button(rituals_frame, text="+ Add Ritual", command=add_ritual_row)
+        add_ritual_btn = ttk.Button(rituals_frame, text="+ Add Ritual", command=self.add_ritual_row)
         add_ritual_btn.pack(anchor="w", padx=5, pady=5)
 
-        # ==========================================
-        # 4. SPELLS (PRAWA STRONA - 3 W WIERSZU)
-        # ==========================================
+        # 4. SPELLS
         spells_main_frame = ttk.LabelFrame(right_side, text="Spells")
         spells_main_frame.pack(fill="both", expand=True, pady=(0, 10))
 
         spells_grid_container = ttk.Frame(spells_main_frame)
-        spells_grid_container.pack(fill="both", expand=True, padx=5, pady=5)
+        spells_grid_container.pack(fill="both", expand=True, padx=2, pady=5)
 
         def create_single_spell_card(parent_frame, row_ref):
-            card = ttk.LabelFrame(parent_frame, text="Spell Card")
+            card = ttk.LabelFrame(parent_frame, text="Spell")
 
             header_frame = ttk.Frame(card)
-            header_frame.pack(fill="x", padx=2, pady=1)
+            header_frame.pack(fill="x", padx=2, pady=2)
 
             del_btn = ttk.Button(header_frame, text="✕", width=2)
             del_btn.pack(side="right")
 
+            top_info = ttk.Frame(header_frame)
+            top_info.pack(side="left", fill="x", expand=True)
+
+            ttk.Label(top_info, text="Name:", font=('Helvetica', 8, 'bold')).pack(side="left", padx=(0, 1))
+            name_entry = ttk.Entry(top_info, width=10)
+            name_entry.pack(side="left", padx=(0, 2), fill="x", expand=True)
+
+            ttk.Label(top_info, text="Attr.:", font=('Helvetica', 8, 'bold')).pack(side="left", padx=(1, 1))
+            attr_entry = ttk.Entry(top_info, width=15)
+            attr_entry.pack(side="left", padx=(0, 2), fill="x", expand=True)
+
             body_frame = ttk.Frame(card)
             body_frame.pack(fill="both", expand=True, padx=2, pady=2)
 
-            # Wiersz 1: Spell Name
-            ttk.Label(body_frame, text="Name:", font=('Helvetica', 8, 'bold')).grid(row=0, column=0, sticky="e", padx=1,
-                                                                                    pady=1)
-            name_entry = ttk.Entry(body_frame, width=34)
-            name_entry.grid(row=0, column=1, columnspan=3, sticky="ew", padx=1, pady=1)
+            table_frame = ttk.Frame(body_frame)
+            table_frame.pack(fill="x", pady=2)
 
-            # Wiersz 2: Cost & Skill
-            ttk.Label(body_frame, text="Cost:", font=('Helvetica', 8, 'bold')).grid(row=1, column=0, sticky="e", padx=1,
-                                                                                    pady=1)
-            cost_entry = ttk.Entry(body_frame, width=5)
-            cost_entry.grid(row=1, column=1, sticky="w", padx=1, pady=1)
+            grid_entries = {
+                "Level": [],
+                "Cost": [],
+                "Spell Str.": []
+            }
 
-            ttk.Label(body_frame, text="Skill:", font=('Helvetica', 8, 'bold')).grid(row=1, column=2, sticky="e",
-                                                                                     padx=1, pady=1)
-            skill_entry = ttk.Entry(body_frame, width=8)
-            skill_entry.grid(row=1, column=3, sticky="ew", padx=1, pady=1)
+            rows_labels = ["Level", "Cost", "Spell Str."]
+            for r_idx, label_name in enumerate(rows_labels):
+                ttk.Label(table_frame, text=label_name, font=('Helvetica', 7, 'bold'), width=8, anchor="e").grid(
+                    row=r_idx, column=0, padx=(0, 2), pady=1, sticky="e"
+                )
+                for c_idx in range(7):
+                    e = ttk.Entry(table_frame, width=2, justify="center")
+                    e.grid(row=r_idx, column=c_idx + 1, padx=1, pady=1)
+                    grid_entries[label_name].append(e)
 
-            # Wiersz 3: Range & Target
-            ttk.Label(body_frame, text="Range:", font=('Helvetica', 8, 'bold')).grid(row=2, column=0, sticky="e",
-                                                                                     padx=1, pady=1)
-            range_entry = ttk.Entry(body_frame, width=5)
-            range_entry.grid(row=2, column=1, sticky="w", padx=1, pady=1)
+            desc_frame = ttk.Frame(body_frame)
+            desc_frame.pack(fill="both", expand=True, pady=(2, 0))
 
-            ttk.Label(body_frame, text="Target:", font=('Helvetica', 8, 'bold')).grid(row=2, column=2, sticky="e",
-                                                                                      padx=1, pady=1)
-            target_entry = ttk.Entry(body_frame, width=8)
-            target_entry.grid(row=2, column=3, sticky="ew", padx=1, pady=1)
-
-            # Wiersz 4: Duration & Resistance
-            ttk.Label(body_frame, text="Duration:", font=('Helvetica', 8, 'bold')).grid(row=3, column=0, sticky="e",
-                                                                                        padx=1, pady=1)
-            duration_entry = ttk.Entry(body_frame, width=5)
-            duration_entry.grid(row=3, column=1, sticky="w", padx=1, pady=1)
-
-            ttk.Label(body_frame, text="Resist:", font=('Helvetica', 8, 'bold')).grid(row=3, column=2, sticky="e",
-                                                                                      padx=1, pady=1)
-            resist_entry = ttk.Entry(body_frame, width=8)
-            resist_entry.grid(row=3, column=3, sticky="ew", padx=1, pady=1)
-
-            # Wiersz 5: Effect / Notes
-            ttk.Label(body_frame, text="Effect:", font=('Helvetica', 8, 'bold')).grid(row=4, column=0, sticky="ne",
-                                                                                      padx=1, pady=2)
-            effect_text = tk.Text(body_frame, height=3, width=16, wrap="word")
-            effect_text.grid(row=4, column=1, columnspan=3, sticky="ew", padx=1, pady=2)
+            ttk.Label(desc_frame, text="Description:", font=('Helvetica', 8, 'bold')).pack(anchor="w")
+            desc_text = tk.Text(desc_frame, height=3, width=18, wrap="word")
+            desc_text.pack(fill="both", expand=True, pady=1)
 
             card_data = {
                 "card_frame": card,
                 "del_btn": del_btn,
                 "name": name_entry,
-                "cost": cost_entry,
-                "skill": skill_entry,
-                "range": range_entry,
-                "target": target_entry,
-                "duration": duration_entry,
-                "resist": resist_entry,
-                "effect": effect_text
+                "attr": attr_entry,
+                "grid": grid_entries,
+                "description": desc_text
             }
 
             def remove_this_card():
                 card.destroy()
                 row_ref["active_cards"] -= 1
-                # Jeśli w wierszu nie zostanie żadna karta, usuwamy cały kontener wiersza
                 if row_ref["active_cards"] <= 0:
                     row_ref["row_frame"].destroy()
                     if row_ref in self.spells_vars:
@@ -1547,7 +1517,7 @@ class UESRPGCharacterSheet(tk.Tk):
 
         def add_spell_trio_row():
             row_frame = ttk.Frame(spells_grid_container)
-            row_frame.pack(fill="x", pady=2)
+            row_frame.pack(fill="x", pady=4)
 
             row_data = {
                 "row_frame": row_frame,
@@ -1555,7 +1525,6 @@ class UESRPGCharacterSheet(tk.Tk):
                 "cards": []
             }
 
-            # Tworzymy 3 karty obok siebie
             for _ in range(3):
                 card_data = create_single_spell_card(row_frame, row_data)
                 card_data["card_frame"].pack(side="left", fill="both", expand=True, padx=2)
@@ -1563,15 +1532,15 @@ class UESRPGCharacterSheet(tk.Tk):
 
             self.spells_vars.append(row_data)
 
-        # Domyślnie dodaj 2 wiersze po 3 zaklęcia (łącznie 6 kart)
-        for _ in range(2):
-            add_spell_trio_row()
+        self.add_spell_trio_row = add_spell_trio_row
 
-        add_spell_btn = ttk.Button(spells_main_frame, text="+ Add 3 Spells Row", command=add_spell_trio_row)
+        for _ in range(2):
+            self.add_spell_trio_row()
+
+        add_spell_btn = ttk.Button(spells_main_frame, text="+ Add Spells", command=self.add_spell_trio_row)
         add_spell_btn.pack(anchor="w", padx=5, pady=5)
 
     def update_magic_skill_values(self, school_key):
-        """Pomocnicza funkcja licząca Rank, Bonus i TN dla szkół magii."""
         if not hasattr(self, 'spellcasting_vars') or school_key not in self.spellcasting_vars:
             return
 
@@ -1591,6 +1560,726 @@ class UESRPGCharacterSheet(tk.Tk):
             attr_val = 0
 
         data["tn_var"].set(str(attr_val + bonus))
+# ---------------SAVE&LOAD------------------
+    def setup_menu(self):
+        menubar = tk.Menu(self)
+        self.config(menu=menubar)
+
+        # Menu File
+        file_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="File", menu=file_menu)
+
+        file_menu.add_command(label="Save Character...", command=self.save_to_json, accelerator="Ctrl+S")
+        file_menu.add_command(label="Open Character...", command=self.load_from_json, accelerator="Ctrl+O")
+        file_menu.add_separator()
+        file_menu.add_command(label="Exit", command=self.quit)
+
+        self.bind("<Control-s>", lambda e: self.save_to_json())
+        self.bind("<Control-o>", lambda e: self.load_from_json())
+
+    def save_to_json(self):
+        filename = filedialog.asksaveasfilename(
+            defaultextension=".json",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+            title="Save character data to json file"
+        )
+        if not filename:
+            return
+
+        entries = getattr(self, "tab1_entries", {})
+        get_entry = lambda key: entries[key].get() if key in entries else ""
+
+        derived = getattr(self, "derived_attr_vars", {})
+        attributes_data = {}
+        attributes_max_data = {}
+
+        for k, widget in derived.items():
+            if isinstance(widget, tuple):
+                attributes_data[k] = widget[0].get()
+                attributes_max_data[k] = widget[1].get()
+            else:
+                attributes_data[k] = widget.get()
+
+        data = {
+            "header": {
+                "name": get_entry("Name"),
+                "race": get_entry("Race"),
+                "birthsign": get_entry("Birthsign"),
+                "elite_advances": get_entry("Elite Advances"),
+                "size": get_entry("Size"),
+                "xp": get_entry("XP"),
+                "total_xp": get_entry("Total XP")
+            },
+            "characteristics": {k: v.get() for k, v in getattr(self, "attr_vars", {}).items()},
+            "favored": {k: v.get() for k, v in getattr(self, "favored_vars", {}).items()},
+            "lucky_numbers": get_entry("Lucky Numbers"),
+            "unlucky_numbers": get_entry("Unlucky Numbers"),
+            "attributes": attributes_data,
+            "attributes_max": attributes_max_data,
+            "linguistics": get_entry("Linguistics"),
+            "languages": get_entry("Languages"),
+            "bonds": self.bonds_text.get("1.0", tk.END).strip() if hasattr(self, "bonds_text") else "",
+
+            "skills": {name: info["level_cb"].get() for name, info in getattr(self, "skill_vars", {}).items()},
+            "professions": [
+                {
+                    "name": row["name_entry"].get(),
+                    "level": row["level_cb"].get(),
+                    "attrs": [cb.get() for cb in row["attr_cbs"]]
+                }
+                for row in getattr(self, "prof_rows", [])
+            ],
+            "combat_style": {
+                "name": self.cs_name_entry.get() if hasattr(self, "cs_name_entry") else "",
+                "level": self.cs_level_cb.get() if hasattr(self, "cs_level_cb") else "",
+                "items": [line["entry"].get() for line in getattr(self, "cs_lines", [])]
+            },
+            "specializations": [line["entry"].get() for line in getattr(self, "spec_lines", [])],
+
+            "armor": {
+                zone: {
+                    "ar": vars_dict["ar"].get(),
+                    "enc": vars_dict["enc"].get(),
+                    "type": vars_dict["type"].get()
+                }
+                for zone, vars_dict in getattr(self, "armor_vars", {}).items()
+            } if hasattr(self, "armor_vars") else {},
+            "shield": self.shield_var.get() if hasattr(self, "shield_var") else "",
+            "armor_notes": self.armor_notes_text.get("1.0", tk.END).strip() if hasattr(self,
+                                                                                       "armor_notes_text") else "",
+            "wounds": self.wounds_text.get("1.0", tk.END).strip() if hasattr(self, "wounds_text") else "",
+            "conditions": self.conditions_text.get("1.0", tk.END).strip() if hasattr(self, "conditions_text") else "",
+
+            "weapons": {
+                "melee": [
+                    {
+                        "name": item["name"].get(),
+                        "dmg": item["dmg"].get(),
+                        "mat_bonus": item["mat_bonus"].get(),
+                        "h": item["h"].get(),
+                        "reach": item["reach"].get(),
+                        "enc": item["enc"].get(),
+                        "qualities": {
+                            "crushing": item["qualities"]["crushing"].get(),
+                            "splitting": item["qualities"]["splitting"].get(),
+                            "slashing": item["qualities"]["slashing"].get(),
+                            "other": item["qualities"]["other"].get()
+                        }
+                    }
+                    for item in getattr(self, "weapons_vars", {}).get("melee", [])
+                ],
+                "ranged": [
+                    {
+                        "type": item["type"].get(),
+                        "dmg": item["dmg"].get(),
+                        "h": item["h"].get(),
+                        "range_short": item["range_short"].get(),
+                        "range_med": item["range_med"].get(),
+                        "range_long": item["range_long"].get(),
+                        "qualities": item["qualities"].get(),
+                        "enc": item["enc"].get()
+                    }
+                    for item in getattr(self, "weapons_vars", {}).get("ranged", [])
+                ],
+                "ammo": [
+                    {
+                        "qty": item["qty"].get(),
+                        "name": item["name"].get(),
+                        "dam_mod": item["dam_mod"].get(),
+                        "qualities": item["qualities"].get(),
+                        "enc": item["enc"].get()
+                    }
+                    for item in getattr(self, "weapons_vars", {}).get("ammo", [])
+                ]
+            }
+        }
+        # Items & Equipment
+        equipment_data = []
+        if hasattr(self, "equipment_rows"):
+            for row in self.equipment_rows:
+                qty = row["qty"].get().strip()
+                item = row["item"].get().strip()
+                enc = row["enc_var"].get().strip()
+
+                if qty or item or enc:
+                    equipment_data.append({
+                        "qty": qty,
+                        "item": item,
+                        "enc": enc
+                    })
+
+
+        data["equipment"] = equipment_data
+        data["drakes"] = self.drakes_var.get().strip() if hasattr(self, "drakes_var") else "0"
+        # Talents, Traits, Powers
+        ttp_saved = {}
+        if hasattr(self, "ttp_data"):
+            for category, rows in self.ttp_data.items():
+                cat_list = []
+                for row in rows:
+                    name = row["name"].get().strip()
+                    effect = row["effect"].get().strip()
+
+                    if name or effect:
+                        cat_list.append({
+                            "name": name,
+                            "effect": effect
+                        })
+                ttp_saved[category] = cat_list
+
+        data["ttp_data"] = ttp_saved
+        # Spellcasting, Custom Skills, Specializations, Rituals, Spells
+        magic_data = {}
+
+        # Spellcasting Skills
+        spellcasting_skills = {}
+        if hasattr(self, "spellcasting_vars"):
+            for school_key, widgets in self.spellcasting_vars.items():
+                spellcasting_skills[school_key] = {
+                    "level": widgets["level_cb"].get(),
+                    "rank": widgets["rank_var"].get(),
+                    "bonus": widgets["bonus_var"].get(),
+                    "tn": widgets["tn_var"].get()
+                }
+        magic_data["spellcasting_skills"] = spellcasting_skills
+
+        # Custom Magic Skills
+        custom_magic = []
+        if hasattr(self, "custom_magic_skills"):
+            for row in self.custom_magic_skills:
+                name = row["name"].get().strip()
+                if name:
+                    custom_magic.append({
+                        "name": name,
+                        "attr": row["attr_cb"].get(),
+                        "level": row["level_cb"].get(),
+                        "rank": row["rank_var"].get(),
+                        "bonus": row["bonus_var"].get(),
+                        "tn": row["tn_var"].get()
+                    })
+        magic_data["custom_skills"] = custom_magic
+
+        # Specializations
+        specializations = []
+        if hasattr(self, "specializations_vars"):
+            for row in self.specializations_vars:
+                spec_text = row["entry"].get().strip()
+                if spec_text:
+                    specializations.append(spec_text)
+        magic_data["specializations"] = specializations
+
+        # Rituals
+        rituals = []
+        if hasattr(self, "rituals_vars"):
+            for row in self.rituals_vars:
+                r_name = row["name"].get().strip()
+                r_notes = row["notes"].get().strip()
+                if r_name or r_notes:
+                    rituals.append({
+                        "name": r_name,
+                        "notes": r_notes
+                    })
+        magic_data["rituals"] = rituals
+
+        # Spells
+        saved_spells = []
+        if hasattr(self, "spells_vars"):
+            for row in self.spells_vars:
+                for card in row["cards"]:
+                    if card["card_frame"].winfo_exists():
+                        name = card["name"].get().strip()
+                        desc = card["description"].get("1.0", tk.END).strip()
+
+                        grid_values = {
+                            "level": [e.get().strip() for e in card["grid"]["Level"]],
+                            "cost": [e.get().strip() for e in card["grid"]["Cost"]],
+                            "spell_str": [e.get().strip() for e in card["grid"]["Spell Str."]]
+                        }
+
+                        has_grid_data = any(any(v) for v in grid_values.values())
+                        if name or desc or has_grid_data:
+                            saved_spells.append({
+                                "name": name,
+                                "attr": card["attr"].get().strip(),
+                                "grid": grid_values,
+                                "description": desc
+                            })
+        magic_data["spells"] = saved_spells
+
+        data["magic"] = magic_data
+
+        try:
+            with open(filename, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=4, ensure_ascii=False)
+            messagebox.showinfo("Success", "The character sheet has been saved.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save the file:\n{e}")
+
+    def load_from_json(self):
+        filename = filedialog.askopenfilename(
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+            title="Load character sheet"
+        )
+        if not filename:
+            return
+
+        try:
+            with open(filename, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            # Name, Race, Birthsign
+            header = data.get("header", {})
+            header_mapping = {
+                "Name": header.get("name", ""),
+                "Race": header.get("race", ""),
+                "Birthsign": header.get("birthsign", ""),
+                "Elite Advances": header.get("elite_advances", ""),
+                "Size": header.get("size", ""),
+                "XP": header.get("xp", ""),
+                "Total XP": header.get("total_xp", "")
+            }
+            for k, val in header_mapping.items():
+                if hasattr(self, "tab1_entries") and k in self.tab1_entries:
+                    self.tab1_entries[k].delete(0, tk.END)
+                    self.tab1_entries[k].insert(0, str(val))
+
+            # Characteristics & Favored
+            for k, val in data.get("characteristics", {}).items():
+                if hasattr(self, "attr_vars") and k in self.attr_vars:
+                    self.attr_vars[k].set(val)
+
+            for k, val in data.get("favored", {}).items():
+                if hasattr(self, "favored_vars") and k in self.favored_vars:
+                    self.favored_vars[k].set(val)
+
+            # Lucky / Unlucky Numbers & Languages
+            if hasattr(self, "tab1_entries"):
+                for key_json, key_dict in [("lucky_numbers", "Lucky Numbers"),
+                                           ("unlucky_numbers", "Unlucky Numbers"),
+                                           ("linguistics", "Linguistics"),
+                                           ("languages", "Languages")]:
+                    if key_dict in self.tab1_entries:
+                        self.tab1_entries[key_dict].delete(0, tk.END)
+                        self.tab1_entries[key_dict].insert(0, str(data.get(key_json, "")))
+
+            # Atrybuty pochodne (HP, MP, WT, itp.)
+            attrs = data.get("attributes", {})
+            attrs_max = data.get("attributes_max", {})
+            if hasattr(self, "derived_attr_vars"):
+                for attr_key, widget in self.derived_attr_vars.items():
+                    if isinstance(widget, tuple):  # Pola z podwójnym wpisem (Current / Max)
+                        widget[0].delete(0, tk.END)
+                        widget[0].insert(0, str(attrs.get(attr_key, "")))
+                        widget[1].delete(0, tk.END)
+                        widget[1].insert(0, str(attrs_max.get(attr_key, "")))
+                    else:  # Pola z pojedynczym wpisem (WT, Speed, IR)
+                        widget.delete(0, tk.END)
+                        widget.insert(0, str(attrs.get(attr_key, "")))
+
+            # Bonds
+            if hasattr(self, "bonds_text"):
+                self.bonds_text.delete("1.0", tk.END)
+                self.bonds_text.insert("1.0", data.get("bonds", ""))
+
+            # --- PAGE 2: SKILLS ---
+            skills_data = data.get("skills", {})
+            if hasattr(self, "skill_vars"):
+                for skill_name, level_val in skills_data.items():
+                    if skill_name in self.skill_vars:
+                        self.skill_vars[skill_name]["level_cb"].set(level_val)
+
+            # --- PAGE 2: PROFESSIONS ---
+            professions_data = data.get("professions", [])
+            if hasattr(self, "prof_rows"):
+                for row in list(self.prof_rows):
+                    row["frame"].destroy()
+                self.prof_rows.clear()
+                for prof in professions_data:
+                    if hasattr(self, "add_prof_row"):
+                        self.add_prof_row()
+                        last_row = self.prof_rows[-1]
+
+                        last_row["name_entry"].delete(0, tk.END)
+                        last_row["name_entry"].insert(0, prof.get("name", ""))
+
+                        last_row["level_cb"].set(prof.get("level", "Untrained"))
+
+                        attrs = prof.get("attrs", ["None", "None", "None"])
+                        for idx, cb in enumerate(last_row["attr_cbs"]):
+                            if idx < len(attrs):
+                                cb.set(attrs[idx])
+
+                # --- PAGE 2: COMBAT STYLE ---
+                cs_data = data.get("combat_style", {})
+                if hasattr(self, "cs_name_entry"):
+                    self.cs_name_entry.delete(0, tk.END)
+                    self.cs_name_entry.insert(0, cs_data.get("name", ""))
+                    self.cs_level_cb.set(cs_data.get("level", "Untrained"))
+
+                    for line in list(self.cs_lines):
+                        line["frame"].destroy()
+                    self.cs_lines.clear()
+
+                    items_list = cs_data.get("items", cs_data.get("lines", []))
+
+                    for line_text in items_list:
+                        if hasattr(self, "add_cs_line_row"):
+                            self.add_cs_line_row()
+                            last_entry = self.cs_lines[-1]["entry"]
+                            last_entry.delete(0, tk.END)
+                            last_entry.insert(0, str(line_text))
+
+            # --- PAGE 2: SPECIALIZATIONS ---
+            spec_data = data.get("specializations", [])
+            if hasattr(self, "spec_lines"):
+                for line in list(self.spec_lines):
+                    line["frame"].destroy()
+                self.spec_lines.clear()
+
+                for spec_text in spec_data:
+                    if hasattr(self, "add_spec_line_row"):
+                        self.add_spec_line_row()
+                        self.spec_lines[-1]["entry"].insert(0, spec_text)
+
+            if hasattr(self, "recalculate_all_tns"):
+                self.recalculate_all_tns()
+            # --- ARMOR---
+            armor_data = data.get("armor", {})
+            if hasattr(self, "armor_vars") and isinstance(self.armor_vars, dict):
+                for zone_key, zone_data in armor_data.items():
+                    if zone_key in self.armor_vars and isinstance(zone_data, dict):
+                        # AR
+                        self.armor_vars[zone_key]["ar"].set(str(zone_data.get("ar", "")))
+                        # ENC
+                        self.armor_vars[zone_key]["enc"].set(str(zone_data.get("enc", "")))
+                        # Type
+                        self.armor_vars[zone_key]["type"].set(str(zone_data.get("type", "")))
+
+            # --- SHIELD ---
+            if hasattr(self, "shield_var"):
+                self.shield_var.set(str(data.get("shield", "")))
+
+            # --- ARMOR NOTES (tk.Text) ---
+            if hasattr(self, "armor_notes_text"):
+                self.armor_notes_text.delete("1.0", tk.END)
+                self.armor_notes_text.insert("1.0", str(data.get("armor_notes", "")))
+
+            # --- WOUNDS (tk.Text) ---
+            if hasattr(self, "wounds_text"):
+                self.wounds_text.delete("1.0", tk.END)
+                self.wounds_text.insert("1.0", str(data.get("wounds", "")))
+
+            # --- CONDITIONS (tk.Text) ---
+            if hasattr(self, "conditions_text"):
+                self.conditions_text.delete("1.0", tk.END)
+                self.conditions_text.insert("1.0", str(data.get("conditions", "")))
+
+            # 10. Weapons: Melee, Ranged, Ammo
+            weapons_data = data.get("weapons", {})
+            if hasattr(self, "weapons_vars"):
+
+                # --- MELEE WEAPONS ---
+                for item in list(self.weapons_vars.get("melee", [])):
+                    if "frame" in item:
+                        item["frame"].destroy()
+                self.weapons_vars["melee"].clear()
+
+                for m in weapons_data.get("melee", []):
+                    if hasattr(self, "add_melee_row"):
+                        self.add_melee_row()
+                        last = self.weapons_vars["melee"][-1]
+
+                        last["name"].delete(0, tk.END)
+                        last["name"].insert(0, m.get("name", ""))
+
+                        last["dmg"].set(m.get("dmg", "1d4"))
+                        last["mat_bonus"].set(m.get("mat_bonus", "+0"))
+                        last["h"].set(m.get("h", "1H"))
+
+                        last["reach"].delete(0, tk.END)
+                        last["reach"].insert(0, str(m.get("reach", "")))
+
+                        last["enc"].delete(0, tk.END)
+                        last["enc"].insert(0, str(m.get("enc", "")))
+
+                        # Qualities
+                        qualities = m.get("qualities", {})
+                        if isinstance(qualities, dict):
+                            last["qualities"]["crushing"].set(qualities.get("crushing", False))
+                            last["qualities"]["splitting"].set(qualities.get("splitting", False))
+                            last["qualities"]["slashing"].set(qualities.get("slashing", False))
+
+                            last["qualities"]["other"].delete(0, tk.END)
+                            last["qualities"]["other"].insert(0, str(qualities.get("other", "")))
+
+                # --- RANGED WEAPONS ---
+                for item in list(self.weapons_vars.get("ranged", [])):
+                    if "frame" in item:
+                        item["frame"].destroy()
+                self.weapons_vars["ranged"].clear()
+
+                for r in weapons_data.get("ranged", []):
+                    if hasattr(self, "add_ranged_row"):
+                        self.add_ranged_row()
+                        last = self.weapons_vars["ranged"][-1]
+
+                        last["type"].delete(0, tk.END)
+                        last["type"].insert(0, r.get("type", ""))
+
+                        last["dmg"].set(r.get("dmg", "1d4"))
+                        last["h"].set(r.get("h", "2H"))
+
+                        last["range_short"].delete(0, tk.END)
+                        last["range_short"].insert(0, str(r.get("range_short", "")))
+
+                        last["range_med"].delete(0, tk.END)
+                        last["range_med"].insert(0, str(r.get("range_med", "")))
+
+                        last["range_long"].delete(0, tk.END)
+                        last["range_long"].insert(0, str(r.get("range_long", "")))
+
+                        last["qualities"].delete(0, tk.END)
+                        last["qualities"].insert(0, str(r.get("qualities", "")))
+
+                        last["enc"].delete(0, tk.END)
+                        last["enc"].insert(0, str(r.get("enc", "")))
+
+                # --- AMMO ---
+                for item in list(self.weapons_vars.get("ammo", [])):
+                    if "frame" in item:
+                        item["frame"].destroy()
+                self.weapons_vars["ammo"].clear()
+
+                for a in weapons_data.get("ammo", []):
+                    if hasattr(self, "add_ammo_row"):
+                        self.add_ammo_row()
+                        last = self.weapons_vars["ammo"][-1]
+
+                        last["qty"].delete(0, tk.END)
+                        last["qty"].insert(0, str(a.get("qty", "")))
+
+                        last["name"].delete(0, tk.END)
+                        last["name"].insert(0, a.get("name", ""))
+
+                        last["dam_mod"].delete(0, tk.END)
+                        last["dam_mod"].insert(0, str(a.get("dam_mod", "")))
+
+                        last["qualities"].delete(0, tk.END)
+                        last["qualities"].insert(0, str(a.get("qualities", "")))
+
+                        last["enc"].delete(0, tk.END)
+                        last["enc"].insert(0, str(a.get("enc", "")))
+            # Items & Equipment
+            if hasattr(self, "equipment_rows"):
+                # Czyszczenie dotychczasowych pól na stronie 4
+                for row in self.equipment_rows:
+                    row["qty"].delete(0, tk.END)
+                    row["item"].delete(0, tk.END)
+                    row["enc_var"].set("")
+
+                equipment_list = data.get("equipment", [])
+                for idx, item_data in enumerate(equipment_list):
+                    if idx < len(self.equipment_rows):
+                        self.equipment_rows[idx]["qty"].insert(0, str(item_data.get("qty", "")))
+                        self.equipment_rows[idx]["item"].insert(0, str(item_data.get("item", "")))
+                        self.equipment_rows[idx]["enc_var"].set(str(item_data.get("enc", "")))
+
+            # Drakes
+            if hasattr(self, "drakes_var"):
+                self.drakes_var.set(str(data.get("drakes", "0")))
+
+            if hasattr(self, "calculate_total_enc"):
+                self.calculate_total_enc()
+            # Talents, Traits, Powers
+            if hasattr(self, "ttp_data"):
+                saved_ttp = data.get("ttp_data", {})
+
+                for category_key in ["talents", "traits", "powers"]:
+                    if category_key in self.ttp_data:
+                        for row in list(self.ttp_data[category_key]):
+                            self._remove_ttp_row(category_key, row)
+
+                        items = saved_ttp.get(category_key, [])
+                        for item in items:
+                            if hasattr(self, "_add_ttp_row_with_data"):
+                                self._add_ttp_row_with_data(category_key, item.get("name", ""),
+                                                            item.get("effect", ""))
+            #  Magic
+            magic_data = data.get("magic", {})
+
+            # Spellcasting Skills
+            saved_spells_skills = magic_data.get("spellcasting_skills", {})
+            if hasattr(self, "spellcasting_vars"):
+                for school_key, widgets in self.spellcasting_vars.items():
+                    if school_key in saved_spells_skills:
+                        s_info = saved_spells_skills[school_key]
+                        widgets["level_cb"].set(s_info.get("level", "Untrained"))
+                        self.update_magic_skill_values(school_key)
+
+            # Custom Magic Skills
+            if hasattr(self, "custom_magic_skills"):
+                for row in list(self.custom_magic_skills):
+                    row["frame"].destroy()
+                self.custom_magic_skills.clear()
+
+                saved_custom = magic_data.get("custom_skills", [])
+                for c_item in saved_custom:
+                    if hasattr(self, "add_custom_skill_row"):
+                        self.add_custom_skill_row()
+                        last_row = self.custom_magic_skills[-1]
+                        last_row["name"].insert(0, c_item.get("name", ""))
+                        last_row["attr_cb"].set(c_item.get("attr", "Wp"))
+                        last_row["level_cb"].set(c_item.get("level", "Untrained"))
+                        last_row["level_cb"].event_generate("<<ComboboxSelected>>")
+
+            # Specializations
+            if hasattr(self, "specializations_vars"):
+                for row in list(self.specializations_vars):
+                    row["frame"].destroy()
+                self.specializations_vars.clear()
+
+                saved_specs = magic_data.get("specializations", [])
+                for spec_text in saved_specs:
+                    if hasattr(self, "add_spec_row"):
+                        self.add_spec_row()
+                        last_row = self.specializations_vars[-1]
+                        last_row["entry"].insert(0, str(spec_text))
+
+            # Rituals
+            if hasattr(self, "rituals_vars"):
+                for row in list(self.rituals_vars):
+                    row["frame"].destroy()
+                self.rituals_vars.clear()
+
+                saved_rituals = magic_data.get("rituals", [])
+                for r_item in saved_rituals:
+                    if hasattr(self, "add_ritual_row"):
+                        self.add_ritual_row()
+                        last_row = self.rituals_vars[-1]
+                        last_row["name"].insert(0, r_item.get("name", ""))
+                        last_row["notes"].insert(0, r_item.get("notes", ""))
+
+            # Spells (Karty Zaklęć w wierszach po 3)
+            if hasattr(self, "spells_vars"):
+                for row in list(self.spells_vars):
+                    row["row_frame"].destroy()
+                self.spells_vars.clear()
+
+                saved_spells = magic_data.get("spells", [])
+                if saved_spells and hasattr(self, "add_spell_trio_row"):
+                    needed_rows = (len(saved_spells) + 2) // 3
+                    for _ in range(needed_rows):
+                        self.add_spell_trio_row()
+
+                    spell_idx = 0
+                    for row in self.spells_vars:
+                        for card in row["cards"]:
+                            if spell_idx < len(saved_spells):
+                                s_data = saved_spells[spell_idx]
+                                card["name"].insert(0, s_data.get("name", ""))
+                                card["attr"].insert(0, s_data.get("attr", ""))
+
+                                grid_data = s_data.get("grid", {})
+                                levels = grid_data.get("level", [])
+                                costs = grid_data.get("cost", [])
+                                spell_strs = grid_data.get("spell_str", [])
+
+                                for idx, val in enumerate(levels):
+                                    if idx < 7:
+                                        card["grid"]["Level"][idx].insert(0, val)
+
+                                for idx, val in enumerate(costs):
+                                    if idx < 7:
+                                        card["grid"]["Cost"][idx].insert(0, val)
+
+                                for idx, val in enumerate(spell_strs):
+                                    if idx < 7:
+                                        card["grid"]["Spell Str."][idx].insert(0, val)
+
+                                card["description"].delete("1.0", tk.END)
+                                card["description"].insert("1.0", s_data.get("description", ""))
+
+                                spell_idx += 1
+                            else:
+                                card["card_frame"].pack_forget()
+
+            messagebox.showinfo("Success", "The character sheet has been successfully loaded")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load the file:\n{e}")
+
+    def calculate_bonus(self, attr, bonus_name):
+        if not hasattr(self, "attr_vars") or attr not in self.attr_vars:
+            return
+
+        try:
+            val_str = self.attr_vars[attr].get()
+            val = int(val_str) if val_str.isdigit() else 0
+            bonus_val = val // 10
+        except (ValueError, TypeError):
+            bonus_val = 0
+
+        if hasattr(self, "bonus_vars") and bonus_name in self.bonus_vars:
+            self.bonus_vars[bonus_name].set(str(bonus_val))
+
+    def recalculate_magic_tn(self, *args):
+        if hasattr(self, "magic_skills") and isinstance(self.magic_skills, dict):
+            for skill_name, widgets in self.magic_skills.items():
+                if not isinstance(widgets, dict):
+                    continue
+
+                attr_key = "Int" if "Int" in str(skill_name) else "Wp"
+                base_attr = self.get_attribute_value(attr_key) if hasattr(self, "get_attribute_value") else 0
+
+                rank_e = widgets.get("rank") or widgets.get("rank_entry")
+                bonus_e = widgets.get("bonus") or widgets.get("bonus_entry")
+                tn_e = widgets.get("tn") or widgets.get("tn_entry")
+
+                try:
+                    rank = float(rank_e.get().replace(',', '.')) if (rank_e and hasattr(rank_e, "get")) else 0.0
+                except ValueError:
+                    rank = 0.0
+
+                try:
+                    bonus = float(bonus_e.get().replace(',', '.')) if (bonus_e and hasattr(bonus_e, "get")) else 0.0
+                except ValueError:
+                    bonus = 0.0
+
+                if tn_e and hasattr(tn_e, "config"):
+                    tn = int(base_attr + rank + bonus)
+                    tn_e.config(state="normal")
+                    tn_e.delete(0, tk.END)
+                    tn_e.insert(0, str(tn))
+                    tn_e.config(state="readonly")
+
+        if hasattr(self, "custom_magic_skills") and isinstance(self.custom_magic_skills, list):
+            for row in self.custom_magic_skills:
+                if not isinstance(row, dict):
+                    continue
+
+                attr_cb = row.get("attr") or row.get("attr_cb")
+                attr_key = attr_cb.get() if (attr_cb and hasattr(attr_cb, "get")) else "Wp"
+                base_attr = self.get_attribute_value(attr_key) if hasattr(self, "get_attribute_value") else 0
+
+                rank_e = row.get("rank") or row.get("rank_entry")
+                bonus_e = row.get("bonus") or row.get("bonus_entry")
+                tn_e = row.get("tn") or row.get("tn_entry")
+
+                try:
+                    rank = float(rank_e.get().replace(',', '.')) if (rank_e and hasattr(rank_e, "get")) else 0.0
+                except ValueError:
+                    rank = 0.0
+
+                try:
+                    bonus = float(bonus_e.get().replace(',', '.')) if (bonus_e and hasattr(bonus_e, "get")) else 0.0
+                except ValueError:
+                    bonus = 0.0
+
+                if tn_e and hasattr(tn_e, "config"):
+                    tn = int(base_attr + rank + bonus)
+                    tn_e.config(state="normal")
+                    tn_e.delete(0, tk.END)
+                    tn_e.insert(0, str(tn))
+                    tn_e.config(state="readonly")
 if __name__ == "__main__":
     app = UESRPGCharacterSheet()
     app.mainloop()
